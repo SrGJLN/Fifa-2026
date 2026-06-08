@@ -1,0 +1,6 @@
+{
+  "name": "Quiniela Mundial 2026",
+  "description": "Una quiniela interactiva y compartida para el Mundial de Fútbol 2026, para pronosticar desde la fase de grupos hasta la gran final con amigos y seguir una tabla de clasificación general en tiempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
