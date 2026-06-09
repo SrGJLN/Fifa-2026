@@ -202,6 +202,8 @@ app.post('/api/predictions', async (req, res) => {
   try {
     // Mandamos el comando HSET en el formato de array nativo que Upstash procesa al instante
     if (UPSTASH_REST_URL && UPSTASH_REST_TOKEN) {
+      console.log('URL:', UPSTASH_REST_URL);
+      console.log('TOKEN:', UPSTASH_REST_TOKEN ? UPSTASH_REST_TOKEN.substring(0, 20) + '...' : 'NO EXISTE');
       const upstashRes = await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
