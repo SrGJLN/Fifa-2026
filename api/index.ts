@@ -39,6 +39,7 @@ async function loadDb(): Promise<DbStore> {
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
     const dataParticipants = await resParticipants.json();
+    console.log('HGETALL respuesta:', JSON.stringify(dataParticipants));
 
     let participants: Participant[] = [];
     if (dataParticipants && Array.isArray(dataParticipants.result)) {
