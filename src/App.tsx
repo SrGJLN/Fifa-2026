@@ -243,7 +243,7 @@ export default function App() {
       const res = await fetch('/api/reset', { method: 'POST' });
       if (!res.ok) throw new Error('No se pudo resetear.');
       const data = await res.json();
-      setParticipants(prev => [...prev, data.participant]);
+      setParticipants([]);
       setOfficialMatches(data.officialMatches);
       setOfficialThirds(data.officialThirds);
       setPredictionsClosed(data.predictionsClosed || false);
