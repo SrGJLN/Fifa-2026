@@ -147,6 +147,7 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
 // Estado inicial del juego
 app.get('/api/state', async (req, res) => {
   const store = await loadDb();
+  console.log('Participantes cargados:', store.participants.length);
   res.json({
     participants: store.participants,
     officialMatches: store.officialMatches,
