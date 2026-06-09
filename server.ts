@@ -273,28 +273,36 @@ app.post('/api/reset', (req, res) => {
 // ---- VITE MIDDLEWARE SETUP -----
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  // Si NO es Vercel y NO es producción local, levanta Vite en modo desarrollo
+  if (!isVercel && process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
+    });
   } else {
+    // Si es Vercel o producción local, sirve los archivos estáticos de Vite
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+
+    // Solo escucha en puerto si NO está en Vercel (evita colisiones en producción)
+    if (!isVercel) {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Express Server en producción local: http://0.0.0.0:${PORT}`);
+      });
+    }
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Express Server connected on http://0.0.0.0:${PORT}`);
-  });
 }
 
-if (!isVercel) {
-  startServer();
-}
+// Ejecutamos la configuración del servidor en cualquier entorno
+startServer();
 
 export default app;
