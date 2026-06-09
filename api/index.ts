@@ -1,7 +1,10 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import express from 'express';
 import path from 'path';
-import { Redis } from '@upstash/redis';
-const kv = Redis.fromEnv(); 
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData';
 import { calculatePoints } from '../src/utils/scoring';
 import { Match, Participant } from '../src/types';
@@ -13,6 +16,10 @@ app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
 
+// Obtenemos las credenciales directas de la REST API desde las variables de entorno
+const UPSTASH_REST_URL = process.env.KV_REST_API_URL;
+const UPSTASH_REST_TOKEN = process.env.KV_REST_API_TOKEN;
+
 interface DbStore {
   participants: Participant[];
   officialMatches: Match[];
@@ -20,15 +27,31 @@ interface DbStore {
   predictionsClosed?: boolean;
 }
 
-// Carga el estado global de la base de datos en la nube (Vercel KV)
+// Carga el estado global de la base de datos en la nube (Upstash Redis vía REST HTTP)
 async function loadDb(): Promise<DbStore> {
   try {
-    // Intentamos buscar el estado guardado con la clave 'quiniela_state'
-    const store = await kv.get<DbStore>('quiniela_state');
-    
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
+      throw new Error("Faltan las variables de entorno de Upstash Redis");
+    }
+
+    // Petición HTTP GET directa para obtener el estado de la clave 'quiniela_state'
+    const response = await fetch(`${UPSTASH_REST_URL}/get/quiniela_state`, {
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`
+      }
+    });
+
+    const data = await response.json();
+
+    // Upstash devuelve el resultado dentro de la propiedad 'result'
+    let store: DbStore | null = null;
+    if (data && data.result) {
+      store = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+    }
+
     if (store) {
       let changed = false;
-      
+
       if (!store.officialMatches || store.officialMatches.length === 0) {
         store.officialMatches = JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES));
         changed = true;
@@ -45,7 +68,7 @@ async function loadDb(): Promise<DbStore> {
         store.predictionsClosed = false;
         changed = true;
       }
-      
+
       // Si hay partidos oficiales, aseguramos que tengan todas las propiedades necesarias
       if (store.officialMatches.length !== ALL_INITIAL_MATCHES.length) {
         const merged: Match[] = [];
@@ -68,7 +91,7 @@ async function loadDb(): Promise<DbStore> {
       return store;
     }
   } catch (e) {
-    console.error("Error leyendo de Vercel KV, retornando estado limpio", e);
+    console.error("Error leyendo de Upstash Redis, retornando estado limpio", e);
   }
 
   // Si no hay datos (primera ejecución), inicializamos el estado
@@ -82,12 +105,24 @@ async function loadDb(): Promise<DbStore> {
   return initial;
 }
 
-// Guarda de forma permanente el estado completo en la nube
+// Guarda de forma permanente el estado completo en la nube vía REST HTTP
 async function saveDb(store: DbStore) {
   try {
-    await kv.set('quiniela_state', store);
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
+      throw new Error("Faltan las variables de entorno de Upstash Redis");
+    }
+
+    // Enviamos el comando SET mediante una petición POST
+    await fetch(`${UPSTASH_REST_URL}/set/quiniela_state`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(store)
+    });
   } catch (err) {
-    console.error("Error escribiendo en Vercel KV", err);
+    console.error("Error escribiendo en Upstash Redis", err);
   }
 }
 
@@ -96,7 +131,7 @@ function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
     const breakdown = calculatePoints(p.groupPicks, store.officialMatches);
     const bracketBreakdown = calculatePoints(p.bracketPicks, store.officialMatches);
-    
+
     return {
       ...p,
       totalPoints: breakdown.totalPoints + bracketBreakdown.totalPoints,
@@ -191,7 +226,7 @@ app.post('/api/official/update-match', async (req, res) => {
   }
 
   const match = store.officialMatches[matchIdx];
-  
+
   if (completed) {
     match.teamHomeScore = teamHomeScore !== undefined ? Number(teamHomeScore) : undefined;
     match.teamAwayScore = teamAwayScore !== undefined ? Number(teamAwayScore) : undefined;
@@ -222,7 +257,7 @@ app.post('/api/official/update-match', async (req, res) => {
 
 // Actualizar los mejores terceros oficiales
 app.post('/api/official/update-thirds', async (req, res) => {
-  const { officialThirds } = req.body; // <--- Corregido el "req_" truncado
+  const { officialThirds } = req.body;
   if (!Array.isArray(officialThirds)) {
     res.status(400).json({ error: 'officialThirds debe ser un arreglo de IDs' });
     return;
@@ -269,7 +304,7 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-    
+
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
     });
