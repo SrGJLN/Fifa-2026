@@ -1,5 +1,8 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import express from 'express';
-import path from 'path';
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData.js';
 import { Participant } from '../src/types.js';
 
