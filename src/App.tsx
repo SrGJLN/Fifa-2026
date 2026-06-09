@@ -162,7 +162,7 @@ export default function App() {
       }
 
       const data = await res.json();
-      setParticipants(data.participants);
+      setParticipants(prev => [...prev, data.participant]);
 
       // Notify success
       alert(`¡Felicidades, ${userName}! Tu quiniela ha sido registrada con éxito y ya figuras en la Tabla General.`);
@@ -210,7 +210,7 @@ export default function App() {
       if (!res.ok) throw new Error('No se pudo guardar la posición oficial.');
       const data = await res.json();
       setOfficialMatches(data.officialMatches);
-      setParticipants(data.participants);
+      setParticipants(prev => [...prev, data.participant]);
       setOfficialThirds(data.officialThirds);
     } catch (e) {
       console.error(e);
@@ -230,7 +230,7 @@ export default function App() {
       if (!res.ok) throw new Error('No se pudieron actualizar los terceros oficiales.');
       const data = await res.json();
       setOfficialMatches(data.officialMatches);
-      setParticipants(data.participants);
+      setParticipants(prev => [...prev, data.participant]);
       setOfficialThirds(data.officialThirds);
     } catch (e) {
       console.error(e);
@@ -243,7 +243,7 @@ export default function App() {
       const res = await fetch('/api/reset', { method: 'POST' });
       if (!res.ok) throw new Error('No se pudo resetear.');
       const data = await res.json();
-      setParticipants(data.participants);
+      setParticipants(prev => [...prev, data.participant]);
       setOfficialMatches(data.officialMatches);
       setOfficialThirds(data.officialThirds);
       setPredictionsClosed(data.predictionsClosed || false);

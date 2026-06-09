@@ -148,10 +148,9 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
 app.get('/api/state', async (req, res) => {
   const store = await loadDb();
   res.json({
-    participants: store.participants,
+    participant: null,           // ← solo el nuevo, el frontend lo agrega
     officialMatches: store.officialMatches,
-    officialThirds: store.officialThirds,
-    predictionsClosed: store.predictionsClosed || false
+    officialThirds: store.officialThirds
   });
 });
 
