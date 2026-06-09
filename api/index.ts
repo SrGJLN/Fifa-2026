@@ -1,12 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
-// Corregimos los paths subiendo un nivel con '../'
+// Importamos la conexión nativa de Vercel KV
+import { kv } from '@vercel/kv'; 
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData';
 import { calculatePoints } from '../src/utils/scoring';
 import { Match, Participant } from '../src/types';
@@ -17,16 +12,6 @@ const PORT = 3000;
 app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
-// En Vercel usamos /tmp de forma obligatoria. En local usamos la raíz del proyecto.
-const DB_DIR = isVercel ? '/tmp' : path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DB_DIR, 'db.json');
-
-// ... (todo el resto de tu lógica de endpoints /api/state, /api/predictions se queda exactamente igual)
-
-// Ensure db directory and file exist
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
 
 interface DbStore {
   participants: Participant[];
@@ -35,79 +20,81 @@ interface DbStore {
   predictionsClosed?: boolean;
 }
 
-function loadDb(): DbStore {
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const data = fs.readFileSync(DB_FILE, 'utf-8');
-      const parsed = JSON.parse(data);
-      
+// Carga el estado global de la base de datos en la nube (Vercel KV)
+async function loadDb(): Promise<DbStore> {
+  try {
+    // Intentamos buscar el estado guardado con la clave 'quiniela_state'
+    const store = await kv.get<DbStore>('quiniela_state');
+    
+    if (store) {
       let changed = false;
-      if (!parsed.officialMatches || parsed.officialMatches.length === 0) {
-        parsed.officialMatches = JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES));
+      
+      if (!store.officialMatches || store.officialMatches.length === 0) {
+        store.officialMatches = JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES));
         changed = true;
       }
-      if (!parsed.participants) {
-        parsed.participants = [];
+      if (!store.participants) {
+        store.participants = [];
         changed = true;
       }
-      if (!parsed.officialThirds) {
-        parsed.officialThirds = [];
+      if (!store.officialThirds) {
+        store.officialThirds = [];
         changed = true;
       }
-      if (parsed.predictionsClosed === undefined) {
-        parsed.predictionsClosed = false;
+      if (store.predictionsClosed === undefined) {
+        store.predictionsClosed = false;
         changed = true;
       }
       
-      // If there are official matches, ensure they have all necessary properties from ALL_INITIAL_MATCHES
-      if (parsed.officialMatches.length !== ALL_INITIAL_MATCHES.length) {
-        // Safe merge: keep edited matches but fill others
+      // Si hay partidos oficiales, aseguramos que tengan todas las propiedades necesarias
+      if (store.officialMatches.length !== ALL_INITIAL_MATCHES.length) {
         const merged: Match[] = [];
         ALL_INITIAL_MATCHES.forEach(initM => {
-          const existing = parsed.officialMatches.find((m: Match) => m.id === initM.id);
+          const existing = store.officialMatches.find((m: Match) => m.id === initM.id);
           if (existing) {
             merged.push(existing);
           } else {
             merged.push(JSON.parse(JSON.stringify(initM)));
           }
         });
-        parsed.officialMatches = merged;
+        store.officialMatches = merged;
         changed = true;
       }
 
       if (changed) {
-        saveDb(parsed);
+        await saveDb(store);
       }
 
-      return parsed;
-    } catch (e) {
-      console.error("Error reading db.json, returning clean state", e);
+      return store;
     }
+  } catch (e) {
+    console.error("Error leyendo de Vercel KV, retornando estado limpio", e);
   }
 
+  // Si no hay datos (primera ejecución), inicializamos el estado
   const initial: DbStore = {
     participants: [],
     officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
     officialThirds: [],
     predictionsClosed: false
   };
-  saveDb(initial);
+  await saveDb(initial);
   return initial;
 }
 
-function saveDb(store: DbStore) {
+// Guarda de forma permanente el estado completo en la nube
+async function saveDb(store: DbStore) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2), 'utf-8');
+    await kv.set('quiniela_state', store);
   } catch (err) {
-    console.error("Error writing to db.json", err);
+    console.error("Error escribiendo en Vercel KV", err);
   }
 }
 
-// Recalculates points for all participants based on the current official matches list
-function recalculateAllParticipants(store: DbStore) {
+// Recalcula los puntos de todos los participantes basados en los resultados oficiales actuales
+void function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
     const breakdown = calculatePoints(p.groupPicks, store.officialMatches);
-    // Also calculate points from bracket picks
     const bracketBreakdown = calculatePoints(p.bracketPicks, store.officialMatches);
     
     return {
@@ -121,9 +108,9 @@ function recalculateAllParticipants(store: DbStore) {
 
 // ---- API IMPLEMENTATION -----
 
-// Get overall state (loaded lazily)
-app.get('/api/state', (req, res) => {
-  const store = loadDb();
+// Obtener el estado general de la quiniela
+app.get('/api/state', async (req, res) => {
+  const store = await loadDb();
   res.json({
     participants: store.participants,
     officialMatches: store.officialMatches,
@@ -132,27 +119,27 @@ app.get('/api/state', (req, res) => {
   });
 });
 
-// Toggle predictions closed/open
-app.post('/api/predictions/close', (req, res) => {
+// Cerrar/Abrir el ingreso de predicciones
+app.post('/api/predictions/close', async (req, res) => {
   const { closed } = req.body;
-  const store = loadDb();
+  const store = await loadDb();
   store.predictionsClosed = !!closed;
-  saveDb(store);
+  await saveDb(store);
   res.json({
     success: true,
     predictionsClosed: store.predictionsClosed
   });
 });
 
-// Create/Upload a new prediction / prediction set (user details)
-app.post('/api/predictions', (req, res) => {
+// Registrar un nuevo participante con sus predicciones
+app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
     res.status(400).json({ error: 'El nombre es obligatorio' });
     return;
   }
 
-  const store = loadDb();
+  const store = await loadDb();
   if (store.predictionsClosed) {
     res.status(400).json({ error: 'La quiniela está cerrada. No se permiten más predicciones.' });
     return;
@@ -161,7 +148,6 @@ app.post('/api/predictions', (req, res) => {
   const formattedName = name.trim();
   const id = 'user_' + Math.random().toString(36).substring(2, 11);
 
-  // Initial calculation of scores based on official results
   const groupPts = calculatePoints(groupPicks || {}, store.officialMatches);
   const bracketPts = calculatePoints(bracketPicks || {}, store.officialMatches);
 
@@ -178,7 +164,7 @@ app.post('/api/predictions', (req, res) => {
   };
 
   store.participants.push(participant);
-  saveDb(store);
+  await saveDb(store);
 
   res.json({
     participant,
@@ -188,15 +174,15 @@ app.post('/api/predictions', (req, res) => {
   });
 });
 
-// Update a specific match's official scores (Admin role)
-app.post('/api/official/update-match', (req, res) => {
+// Actualizar los marcadores oficiales de un partido (Rol Administrador)
+app.post('/api/official/update-match', async (req, res) => {
   const { matchId, teamHomeScore, teamAwayScore, completed, winnerId } = req.body;
   if (matchId === undefined) {
     res.status(400).json({ error: 'matchId es obligatorio' });
     return;
   }
 
-  const store = loadDb();
+  const store = await loadDb();
   const matchIdx = store.officialMatches.findIndex(m => m.id === Number(matchId));
 
   if (matchIdx === -1) {
@@ -222,9 +208,9 @@ app.post('/api/official/update-match', (req, res) => {
     match.winnerId = undefined;
   }
 
-  // Recalculate scores for everyone
+  // Recalculamos la puntuación de todos los jugadores tras el resultado
   recalculateAllParticipants(store);
-  saveDb(store);
+  await saveDb(store);
 
   res.json({
     success: true,
@@ -234,76 +220,6 @@ app.post('/api/official/update-match', (req, res) => {
   });
 });
 
-// Update the official 8 best thirds
-app.post('/api/official/update-thirds', (req, res) => {
-  const { officialThirds } = req.body;
-  if (!Array.isArray(officialThirds)) {
-    res.status(400).json({ error: 'officialThirds debe ser un arreglo de IDs' });
-    return;
-  }
-
-  const store = loadDb();
-  store.officialThirds = officialThirds;
-
-  // Recalculate everyone
-  recalculateAllParticipants(store);
-  saveDb(store);
-
-  res.json({
-    success: true,
-    officialMatches: store.officialMatches,
-    participants: store.participants,
-    officialThirds: store.officialThirds
-  });
-});
-
-// Reset the game completely (clears participants but retains match structure, or fully resets matches)
-app.post('/api/reset', (req, res) => {
-  const store = {
-    participants: [],
-    officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
-    officialThirds: [],
-    predictionsClosed: false
-  };
-  saveDb(store);
-  res.json({
-    participants: store.participants,
-    officialMatches: store.officialMatches,
-    officialThirds: store.officialThirds,
-    predictionsClosed: store.predictionsClosed
-  });
-});
-
-// ---- VITE MIDDLEWARE SETUP -----
-
-async function startServer() {
-  if (!isVercel && process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-    
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
-    });
-  } else {
-    // Como estamos dentro de /api, subimos un nivel para encontrar la carpeta 'dist' compilada por Vite en la raíz
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-
-    if (!isVercel) {
-      app.listen(PORT, "0.0.0.0", () => {
-        console.log(`Express Server en producción local: http://0.0.0.0:${PORT}`);
-      });
-    }
-  }
-}
-
-startServer();
-
-export default app;
+// Actualizar los mejores terceros oficiales
+app.post('/api/official/update-thirds', async (req, res) => {
+  const { officialThirds } = req
