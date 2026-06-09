@@ -5,9 +5,9 @@
 
 import express from 'express';
 import path from 'path';
-import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData';
-import { calculatePoints } from '../src/utils/scoring';
-import { Match, Participant } from '../src/types';
+import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData.js';
+import { calculatePoints } from '../src/utils/scoring.js';
+import { Match, Participant } from '../src/types.js';
 
 const app = express();
 const PORT = 3000;
