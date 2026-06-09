@@ -1,5 +1,18 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "api/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "src/data/**",
+          "src/utils/**",
+          "src/types.ts"
+        ]
+      }
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
