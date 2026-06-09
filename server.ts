@@ -16,7 +16,8 @@ const PORT = 3000;
 
 app.use(express.json());
 
-const DB_DIR = path.join(process.cwd(), 'data');
+const isVercel = !!process.env.VERCEL;
+const DB_DIR = isVercel ? '/tmp' : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 
 // Ensure db directory and file exist
@@ -292,4 +293,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!isVercel) {
+  startServer();
+}
+
+export default app;
