@@ -159,6 +159,8 @@ app.get('/api/state', async (req, res) => {
 app.post('/api/predictions/close', async (req, res) => {
   const { closed } = req.body;
   const store = await loadDb();
+  console.log('UPSTASH_URL:', UPSTASH_REST_URL);
+  console.log('UPSTASH_TOKEN:', UPSTASH_REST_TOKEN ? 'existe' : 'NO EXISTE');
   store.predictionsClosed = !!closed;
   await saveDb(store);
   res.json({ success: true, predictionsClosed: store.predictionsClosed });
