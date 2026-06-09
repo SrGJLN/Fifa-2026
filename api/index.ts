@@ -132,10 +132,12 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
     for (const p of participants) {
-      await fetch(`${UPSTASH_REST_URL}`, {
+      await fetch(`${UPSTASH_REST_URL}/pipeline`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([p.id, JSON.stringify(p)])
+        body: JSON.stringify([
+          ['HSET', 'quiniela_participants', p.id, JSON.stringify(p)]
+        ])
       });
     }
   } catch (err) {
@@ -205,7 +207,7 @@ app.post('/api/predictions', async (req, res) => {
     if (UPSTASH_REST_URL && UPSTASH_REST_TOKEN) {
       console.log('URL:', UPSTASH_REST_URL);
       console.log('TOKEN:', UPSTASH_REST_TOKEN ? UPSTASH_REST_TOKEN.substring(0, 20) + '...' : 'NO EXISTE');
-      const upstashRes = await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants`, {
+      const upstashRes = await fetch(`${UPSTASH_REST_URL}/pipeline`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify([
