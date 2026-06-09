@@ -207,7 +207,7 @@ app.post('/api/predictions', async (req, res) => {
       const upstashRes = await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([id, JSON.stringify(participant)])
+        body: JSON.stringify(JSON.stringify(participant))
       });
       const upstashData = await upstashRes.json();
       console.log('Respuesta Upstash HSET:', JSON.stringify(upstashData));
