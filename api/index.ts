@@ -202,11 +202,13 @@ app.post('/api/predictions', async (req, res) => {
   try {
     // Mandamos el comando HSET en el formato de array nativo que Upstash procesa al instante
     if (UPSTASH_REST_URL && UPSTASH_REST_TOKEN) {
-      await fetch(`${UPSTASH_REST_URL}`, {
+      const upstashRes = await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify([id, JSON.stringify(participant)])
       });
+      const upstashData = await upstashRes.json();
+      console.log('Respuesta Upstash HSET:', JSON.stringify(upstashData));
     }
   } catch (error) {
     console.error("No se pudo persistir en Redis, pero devolvemos éxito para no trabar al usuario:", error);
