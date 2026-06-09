@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
-// Importamos la conexión nativa de Vercel KV
-import { kv } from '@vercel/kv'; 
+import { Redis } from '@upstash/redis';
+const kv = Redis.fromEnv(); 
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData';
 import { calculatePoints } from '../src/utils/scoring';
 import { Match, Participant } from '../src/types';
