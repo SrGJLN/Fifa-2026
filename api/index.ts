@@ -34,7 +34,7 @@ async function loadDb(): Promise<DbStore> {
       throw new Error("Faltan las variables de entorno de Upstash Redis");
     }
 
-    // 1. Traer los participantes de forma aislada usando HGETALL
+    // 1. Traer los participantes usando HGETALL con la sintaxis de la URL limpia de Upstash
     const resParticipants = await fetch(`${UPSTASH_REST_URL}/hgetall/quiniela_participants`, {
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
@@ -136,14 +136,24 @@ function recalculateAllParticipants(store: DbStore) {
   });
 }
 
-// Actualiza de forma masiva los datos de los participantes en el Hash (usado al cambiar marcadores oficiales)
+// Actualiza de forma masiva los datos de los participantes usando el formato REST de arreglo seguro
 async function saveAllParticipantsAtomic(participants: Participant[]) {
   try {
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
+
     for (const p of participants) {
-      await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants/${p.id}`, {
+      await fetch(`${UPSTASH_REST_URL}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(p)
+        headers: {
+          Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify([
+          'HSET',
+          'quiniela_participants',
+          p.id,
+          JSON.stringify(p)
+        ])
       });
     }
   } catch (err) {
@@ -176,7 +186,7 @@ app.post('/api/predictions/close', async (req, res) => {
   });
 });
 
-// Registrar un nuevo participante de forma atómica (Evita sobreescrituras)
+// Registrar un nuevo participante de forma atómica sin causar bloqueos (Timeout Fix)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -208,14 +218,19 @@ app.post('/api/predictions', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // Guardamos ÚNICAMENTE a este participante dentro del Hash de Redis sin tocar el resto
-  await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants/${id}`, {
+  // Enviamos el comando HSET estructurado como un arreglo en la raíz de Upstash REST (Solución al cuelgue)
+  await fetch(`${UPSTASH_REST_URL}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(participant)
+    body: JSON.stringify([
+      'HSET',
+      'quiniela_participants',
+      id,
+      JSON.stringify(participant)
+    ])
   });
 
   // Releemos de inmediato el estado consolidado para actualizar la UI del cliente
@@ -308,14 +323,17 @@ app.post('/api/reset', async (req, res) => {
     return;
   }
 
-  // Eliminamos las dos claves para reiniciar limpio
-  await fetch(`${UPSTASH_REST_URL}/del/quiniela_participants`, {
+  // Eliminamos las dos claves usando comandos nativos REST en el cuerpo
+  await fetch(`${UPSTASH_REST_URL}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['DEL', 'quiniela_participants'])
   });
-  await fetch(`${UPSTASH_REST_URL}/del/quiniela_config`, {
+
+  await fetch(`${UPSTASH_REST_URL}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['DEL', 'quiniela_config'])
   });
 
   res.json({
