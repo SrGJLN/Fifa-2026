@@ -5,7 +5,7 @@
 
 import express from 'express';
 import path from 'path';
-import { Redis } from '@upstash/redis'; // <-- Cliente oficial
+import { Redis } from '@upstash/redis';
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData.js';
 import { calculatePoints } from '../src/utils/scoring.js';
 import { Match, Participant } from '../src/types.js';
@@ -17,11 +17,16 @@ app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
 
-// Inicializamos el cliente oficial con tus variables de entorno existentes
-const redis = new Redis({
-  url: process.env.KV_REST_API_URL || '',
-  token: process.env.KV_REST_API_TOKEN || '',
-});
+// Soporte bivalente para variables de Vercel KV o Upstash Directo
+const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+
+if (!url || !token) {
+  console.error("⚠️ CRÍTICO: No se detectaron las variables de entorno de Upstash / Vercel KV.");
+}
+
+// Inicializamos el cliente oficial del SDK
+const redis = new Redis({ url, token });
 
 interface DbStore {
   participants: Participant[];
@@ -30,10 +35,10 @@ interface DbStore {
   predictionsClosed?: boolean;
 }
 
-// Carga el estado global estructurado de forma nativa
+// Carga el estado global de forma nativa y segura
 async function loadDb(): Promise<DbStore> {
   try {
-    // 1. Traer todos los participantes del Hash de forma directa
+    // 1. Traer todos los participantes del Hash
     const allParticipantsObj = await redis.hgetall<Record<string, any>>('quiniela_participants');
 
     let participants: Participant[] = [];
@@ -44,7 +49,7 @@ async function loadDb(): Promise<DbStore> {
       }
     }
 
-    // 2. Traer la configuración general
+    // 2. Traer la configuración general de partidos
     const config = await redis.get<any>('quiniela_config');
 
     if (!config) {
@@ -80,7 +85,7 @@ async function loadDb(): Promise<DbStore> {
   }
 }
 
-// Guarda de manera permanente los datos globales de configuración
+// Guarda los datos globales de configuración
 async function saveDb(store: DbStore) {
   try {
     const config = {
@@ -94,7 +99,6 @@ async function saveDb(store: DbStore) {
   }
 }
 
-// Recalcula los puntos de todos los participantes
 function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
     const breakdown = calculatePoints(p.groupPicks, store.officialMatches);
@@ -109,7 +113,6 @@ function recalculateAllParticipants(store: DbStore) {
   });
 }
 
-// Actualiza masivamente a los participantes en el Hash
 async function saveAllParticipantsAtomic(participants: Participant[]) {
   try {
     for (const p of participants) {
@@ -120,7 +123,7 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
   }
 }
 
-// ---- API IMPLEMENTATION -----
+// ---- API ENDPOINTS -----
 
 app.get('/api/state', async (req, res) => {
   const store = await loadDb();
@@ -140,7 +143,6 @@ app.post('/api/predictions/close', async (req, res) => {
   res.json({ success: true, predictionsClosed: store.predictionsClosed });
 });
 
-// Registrar un nuevo participante (Usa el HSET nativo del SDK - Fin del cuelgue)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -172,11 +174,10 @@ app.post('/api/predictions', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // HSET a través del SDK: se encarga del parseo de forma segura e instantánea
+  // HSET ultra veloz usando el SDK nativo
   await redis.hset('quiniela_participants', { [id]: participant });
 
   const updatedStore = await loadDb();
-
   res.json({
     participant,
     participants: updatedStore.participants,
@@ -194,14 +195,12 @@ app.post('/api/official/update-match', async (req, res) => {
 
   const store = await loadDb();
   const matchIdx = store.officialMatches.findIndex(m => m.id === Number(matchId));
-
   if (matchIdx === -1) {
     res.status(404).json({ error: 'Partido no encontrado' });
     return;
   }
 
   const match = store.officialMatches[matchIdx];
-
   if (completed) {
     match.teamHomeScore = teamHomeScore !== undefined ? Number(teamHomeScore) : undefined;
     match.teamAwayScore = teamAwayScore !== undefined ? Number(teamAwayScore) : undefined;
@@ -226,33 +225,9 @@ app.post('/api/official/update-match', async (req, res) => {
   });
 });
 
-app.post('/api/official/update-thirds', async (req, res) => {
-  const { officialThirds } = req.body;
-  if (!Array.isArray(officialThirds)) {
-    res.status(400).json({ error: 'officialThirds debe ser un arreglo' });
-    return;
-  }
-
-  const store = await loadDb();
-  store.officialThirds = officialThirds;
-
-  recalculateAllParticipants(store);
-  await saveDb(store);
-  await saveAllParticipantsAtomic(store.participants);
-
-  res.json({
-    success: true,
-    officialMatches: store.officialMatches,
-    participants: store.participants,
-    officialThirds: store.officialThirds
-  });
-});
-
-// Reseteo usando el SDK
 app.post('/api/reset', async (req, res) => {
   await redis.del('quiniela_participants');
   await redis.del('quiniela_config');
-
   res.json({
     participants: [],
     officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
@@ -261,8 +236,7 @@ app.post('/api/reset', async (req, res) => {
   });
 });
 
-// ---- VITE MIDDLEWARE SETUP -----
-
+// ---- VITE SETUP -----
 async function startServer() {
   if (!isVercel && process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
@@ -271,10 +245,7 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
-    });
+    app.listen(PORT, "0.0.0.0");
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
