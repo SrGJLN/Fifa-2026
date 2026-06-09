@@ -222,4 +222,73 @@ app.post('/api/official/update-match', async (req, res) => {
 
 // Actualizar los mejores terceros oficiales
 app.post('/api/official/update-thirds', async (req, res) => {
-  const { officialThirds } = req
+  const { officialThirds } = req.body; // <--- Corregido el "req_" truncado
+  if (!Array.isArray(officialThirds)) {
+    res.status(400).json({ error: 'officialThirds debe ser un arreglo de IDs' });
+    return;
+  }
+
+  const store = await loadDb();
+  store.officialThirds = officialThirds;
+
+  recalculateAllParticipants(store);
+  await saveDb(store);
+
+  res.json({
+    success: true,
+    officialMatches: store.officialMatches,
+    participants: store.participants,
+    officialThirds: store.officialThirds
+  });
+});
+
+// Resetear el juego por completo
+app.post('/api/reset', async (req, res) => {
+  const store = {
+    participants: [],
+    officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+    officialThirds: [],
+    predictionsClosed: false
+  };
+  await saveDb(store);
+  res.json({
+    participants: store.participants,
+    officialMatches: store.officialMatches,
+    officialThirds: store.officialThirds,
+    predictionsClosed: store.predictionsClosed
+  });
+});
+
+// ---- VITE MIDDLEWARE SETUP -----
+
+async function startServer() {
+  if (!isVercel && process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+    
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
+    });
+  } else {
+    // Apuntamos a la carpeta estática dist generada por Vite en la raíz
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+
+    if (!isVercel) {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Express Server en producción local: http://0.0.0.0:${PORT}`);
+      });
+    }
+  }
+}
+
+startServer();
+
+export default app;
