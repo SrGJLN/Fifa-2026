@@ -92,7 +92,7 @@ async function saveDb(store: DbStore) {
 }
 
 // Recalcula los puntos de todos los participantes basados en los resultados oficiales actuales
-void function recalculateAllParticipants(store: DbStore) {
+function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
     const breakdown = calculatePoints(p.groupPicks, store.officialMatches);
     const bracketBreakdown = calculatePoints(p.bracketPicks, store.officialMatches);
