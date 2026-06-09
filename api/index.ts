@@ -27,102 +27,97 @@ interface DbStore {
   predictionsClosed?: boolean;
 }
 
-// Carga el estado global de la base de datos en la nube (Upstash Redis vía REST HTTP)
+// Carga el estado global estructurado de forma segura desde Upstash Redis
 async function loadDb(): Promise<DbStore> {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
       throw new Error("Faltan las variables de entorno de Upstash Redis");
     }
 
-    // Petición HTTP GET directa para obtener el estado de la clave 'quiniela_state'
-    const response = await fetch(`${UPSTASH_REST_URL}/get/quiniela_state`, {
-      headers: {
-        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`
-      }
+    // 1. Traer los participantes de forma aislada usando HGETALL
+    const resParticipants = await fetch(`${UPSTASH_REST_URL}/hgetall/quiniela_participants`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
+    const dataParticipants = await resParticipants.json();
 
-    const data = await response.json();
-
-    // Upstash devuelve el resultado dentro de la propiedad 'result'
-    let store: DbStore | null = null;
-    if (data && data.result) {
-      store = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+    let participants: Participant[] = [];
+    if (dataParticipants && dataParticipants.result) {
+      // Upstash HGETALL devuelve un array plano de parejas [key, value, key, value...]
+      const pairs = dataParticipants.result;
+      for (let i = 0; i < pairs.length; i += 2) {
+        try {
+          participants.push(JSON.parse(pairs[i + 1]));
+        } catch (e) {
+          console.error("Error parseando participante individual", e);
+        }
+      }
     }
 
-    if (store) {
-      let changed = false;
+    // 2. Traer la configuración de partidos oficiales y estado del candado
+    const resConfig = await fetch(`${UPSTASH_REST_URL}/get/quiniela_config`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+    });
+    const dataConfig = await resConfig.json();
 
-      if (!store.officialMatches || store.officialMatches.length === 0) {
-        store.officialMatches = JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES));
-        changed = true;
-      }
-      if (!store.participants) {
-        store.participants = [];
-        changed = true;
-      }
-      if (!store.officialThirds) {
-        store.officialThirds = [];
-        changed = true;
-      }
-      if (store.predictionsClosed === undefined) {
-        store.predictionsClosed = false;
-        changed = true;
-      }
-
-      // Si hay partidos oficiales, aseguramos que tengan todas las propiedades necesarias
-      if (store.officialMatches.length !== ALL_INITIAL_MATCHES.length) {
-        const merged: Match[] = [];
-        ALL_INITIAL_MATCHES.forEach(initM => {
-          const existing = store.officialMatches.find((m: Match) => m.id === initM.id);
-          if (existing) {
-            merged.push(existing);
-          } else {
-            merged.push(JSON.parse(JSON.stringify(initM)));
-          }
-        });
-        store.officialMatches = merged;
-        changed = true;
-      }
-
-      if (changed) {
-        await saveDb(store);
-      }
-
-      return store;
+    let config: any = null;
+    if (dataConfig && dataConfig.result) {
+      config = typeof dataConfig.result === 'string' ? JSON.parse(dataConfig.result) : dataConfig.result;
     }
+
+    // Si es la primera ejecución o no hay configuración, la inicializamos
+    if (!config) {
+      config = {
+        officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+        officialThirds: [],
+        predictionsClosed: false
+      };
+
+      await fetch(`${UPSTASH_REST_URL}/set/quiniela_config`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+    }
+
+    return {
+      participants,
+      officialMatches: config.officialMatches || JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+      officialThirds: config.officialThirds || [],
+      predictionsClosed: config.predictionsClosed || false
+    };
+
   } catch (e) {
-    console.error("Error leyendo de Upstash Redis, retornando estado limpio", e);
+    console.error("Error leyendo de Upstash Redis de forma atómica", e);
+    return {
+      participants: [],
+      officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+      officialThirds: [],
+      predictionsClosed: false
+    };
   }
-
-  // Si no hay datos (primera ejecución), inicializamos el estado
-  const initial: DbStore = {
-    participants: [],
-    officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
-    officialThirds: [],
-    predictionsClosed: false
-  };
-  await saveDb(initial);
-  return initial;
 }
 
-// Guarda de forma permanente el estado completo en la nube vía REST HTTP
+// Guarda de manera permanente los datos globales de configuración (partidos y candado)
 async function saveDb(store: DbStore) {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
       throw new Error("Faltan las variables de entorno de Upstash Redis");
     }
 
-    // Enviamos el comando SET mediante una petición POST
-    await fetch(`${UPSTASH_REST_URL}/set/quiniela_state`, {
+    const config = {
+      officialMatches: store.officialMatches,
+      officialThirds: store.officialThirds,
+      predictionsClosed: store.predictionsClosed
+    };
+
+    await fetch(`${UPSTASH_REST_URL}/set/quiniela_config`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(store)
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
     });
+
   } catch (err) {
-    console.error("Error escribiendo en Upstash Redis", err);
+    console.error("Error escribiendo configuración en Upstash", err);
   }
 }
 
@@ -139,6 +134,21 @@ function recalculateAllParticipants(store: DbStore) {
       outcomeCount: breakdown.outcomeCount + bracketBreakdown.outcomeCount
     };
   });
+}
+
+// Actualiza de forma masiva los datos de los participantes en el Hash (usado al cambiar marcadores oficiales)
+async function saveAllParticipantsAtomic(participants: Participant[]) {
+  try {
+    for (const p of participants) {
+      await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants/${p.id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p)
+      });
+    }
+  } catch (err) {
+    console.error("Error actualizando participantes en lote", err);
+  }
 }
 
 // ---- API IMPLEMENTATION -----
@@ -166,7 +176,7 @@ app.post('/api/predictions/close', async (req, res) => {
   });
 });
 
-// Registrar un nuevo participante con sus predicciones
+// Registrar un nuevo participante de forma atómica (Evita sobreescrituras)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -198,14 +208,24 @@ app.post('/api/predictions', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  store.participants.push(participant);
-  await saveDb(store);
+  // Guardamos ÚNICAMENTE a este participante dentro del Hash de Redis sin tocar el resto
+  await fetch(`${UPSTASH_REST_URL}/hset/quiniela_participants/${id}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(participant)
+  });
+
+  // Releemos de inmediato el estado consolidado para actualizar la UI del cliente
+  const updatedStore = await loadDb();
 
   res.json({
     participant,
-    participants: store.participants,
-    officialMatches: store.officialMatches,
-    officialThirds: store.officialThirds
+    participants: updatedStore.participants,
+    officialMatches: updatedStore.officialMatches,
+    officialThirds: updatedStore.officialThirds
   });
 });
 
@@ -243,9 +263,12 @@ app.post('/api/official/update-match', async (req, res) => {
     match.winnerId = undefined;
   }
 
-  // Recalculamos la puntuación de todos los jugadores tras el resultado
+  // Recalculamos los nuevos puntajes de toda la lista basada en el partido modificado
   recalculateAllParticipants(store);
+
+  // Guardamos los cambios de los partidos y persistimos los nuevos puntajes individuales
   await saveDb(store);
+  await saveAllParticipantsAtomic(store.participants);
 
   res.json({
     success: true,
@@ -268,6 +291,7 @@ app.post('/api/official/update-thirds', async (req, res) => {
 
   recalculateAllParticipants(store);
   await saveDb(store);
+  await saveAllParticipantsAtomic(store.participants);
 
   res.json({
     success: true,
@@ -277,20 +301,28 @@ app.post('/api/official/update-thirds', async (req, res) => {
   });
 });
 
-// Resetear el juego por completo
+// Resetear el juego por completo (Elimina las estructuras de Upstash)
 app.post('/api/reset', async (req, res) => {
-  const store = {
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
+    res.status(500).json({ error: 'Credenciales ausentes' });
+    return;
+  }
+
+  // Eliminamos las dos claves para reiniciar limpio
+  await fetch(`${UPSTASH_REST_URL}/del/quiniela_participants`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+  });
+  await fetch(`${UPSTASH_REST_URL}/del/quiniela_config`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+  });
+
+  res.json({
     participants: [],
     officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
     officialThirds: [],
     predictionsClosed: false
-  };
-  await saveDb(store);
-  res.json({
-    participants: store.participants,
-    officialMatches: store.officialMatches,
-    officialThirds: store.officialThirds,
-    predictionsClosed: store.predictionsClosed
   });
 });
 
@@ -309,7 +341,6 @@ async function startServer() {
       console.log(`Express Server conectado en http://0.0.0.0:${PORT}`);
     });
   } else {
-    // Apuntamos a la carpeta estática dist generada por Vite en la raíz
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
