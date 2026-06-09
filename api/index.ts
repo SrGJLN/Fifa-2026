@@ -16,7 +16,7 @@ app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
 
-// Obtenemos las credenciales directas de la REST API desde las variables de entorno
+// Credenciales directas de la REST API desde las variables de entorno
 const UPSTASH_REST_URL = process.env.KV_REST_API_URL;
 const UPSTASH_REST_TOKEN = process.env.KV_REST_API_TOKEN;
 
@@ -34,7 +34,7 @@ async function loadDb(): Promise<DbStore> {
       throw new Error("Faltan las variables de entorno de Upstash Redis");
     }
 
-    // 1. Traer los participantes usando HGETALL con la sintaxis de la URL limpia de Upstash
+    // 1. Traer los participantes usando HGETALL
     const resParticipants = await fetch(`${UPSTASH_REST_URL}/hgetall/quiniela_participants`, {
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
@@ -42,7 +42,6 @@ async function loadDb(): Promise<DbStore> {
 
     let participants: Participant[] = [];
     if (dataParticipants && dataParticipants.result) {
-      // Upstash HGETALL devuelve un array plano de parejas [key, value, key, value...]
       const pairs = dataParticipants.result;
       for (let i = 0; i < pairs.length; i += 2) {
         try {
@@ -136,26 +135,29 @@ function recalculateAllParticipants(store: DbStore) {
   });
 }
 
-// Actualiza de forma masiva los datos de los participantes usando el formato REST de arreglo seguro
+// Actualiza de forma masiva los datos de los participantes usando el endpoint /pipeline
 async function saveAllParticipantsAtomic(participants: Participant[]) {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
+    if (participants.length === 0) return;
 
-    for (const p of participants) {
-      await fetch(`${UPSTASH_REST_URL}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify([
-          'HSET',
-          'quiniela_participants',
-          p.id,
-          JSON.stringify(p)
-        ])
-      });
-    }
+    // Construimos una lista de comandos para ejecutar en un solo viaje (Pipeline)
+    const commands = participants.map(p => [
+      'HSET',
+      'quiniela_participants',
+      p.id,
+      JSON.stringify(p)
+    ]);
+
+    // Apuntamos explícitamente a /pipeline para comandos múltiples en lote
+    await fetch(`${UPSTASH_REST_URL}/pipeline`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(commands)
+    });
   } catch (err) {
     console.error("Error actualizando participantes en lote", err);
   }
@@ -186,7 +188,7 @@ app.post('/api/predictions/close', async (req, res) => {
   });
 });
 
-// Registrar un nuevo participante de forma atómica sin causar bloqueos (Timeout Fix)
+// Registrar un nuevo participante de forma atómica (Usa /pipeline para procesar el array)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -218,22 +220,22 @@ app.post('/api/predictions', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // Enviamos el comando HSET estructurado como un arreglo en la raíz de Upstash REST (Solución al cuelgue)
-  await fetch(`${UPSTASH_REST_URL}`, {
+  // Se envía a /pipeline envuelto en una matriz doble para que Upstash lo entienda de inmediato
+  await fetch(`${UPSTASH_REST_URL}/pipeline`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${UPSTASH_REST_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify([
+    body: JSON.stringify([[
       'HSET',
       'quiniela_participants',
       id,
       JSON.stringify(participant)
-    ])
+    ]])
   });
 
-  // Releemos de inmediato el estado consolidado para actualizar la UI del cliente
+  // Releemos el estado consolidado para actualizar el frontend
   const updatedStore = await loadDb();
 
   res.json({
@@ -278,10 +280,8 @@ app.post('/api/official/update-match', async (req, res) => {
     match.winnerId = undefined;
   }
 
-  // Recalculamos los nuevos puntajes de toda la lista basada en el partido modificado
   recalculateAllParticipants(store);
 
-  // Guardamos los cambios de los partidos y persistimos los nuevos puntajes individuales
   await saveDb(store);
   await saveAllParticipantsAtomic(store.participants);
 
@@ -316,24 +316,20 @@ app.post('/api/official/update-thirds', async (req, res) => {
   });
 });
 
-// Resetear el juego por completo (Elimina las estructuras de Upstash)
+// Resetear el juego por completo (Usa /pipeline para borrar ambas claves simultáneamente)
 app.post('/api/reset', async (req, res) => {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
     res.status(500).json({ error: 'Credenciales ausentes' });
     return;
   }
 
-  // Eliminamos las dos claves usando comandos nativos REST en el cuerpo
-  await fetch(`${UPSTASH_REST_URL}`, {
+  await fetch(`${UPSTASH_REST_URL}/pipeline`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['DEL', 'quiniela_participants'])
-  });
-
-  await fetch(`${UPSTASH_REST_URL}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['DEL', 'quiniela_config'])
+    body: JSON.stringify([
+      ['DEL', 'quiniela_participants'],
+      ['DEL', 'quiniela_config']
+    ])
   });
 
   res.json({
