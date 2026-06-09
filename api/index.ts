@@ -134,7 +134,7 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
       await fetch(`${UPSTASH_REST_URL}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(['HSET', 'quiniela_participants', p.id, JSON.stringify(p)])
+        body: JSON.stringify([p.id, JSON.stringify(p)])
       });
     }
   } catch (err) {
@@ -205,7 +205,7 @@ app.post('/api/predictions', async (req, res) => {
       await fetch(`${UPSTASH_REST_URL}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(['HSET', 'quiniela_participants', id, JSON.stringify(participant)])
+        body: JSON.stringify([id, JSON.stringify(participant)])
       });
     }
   } catch (error) {
