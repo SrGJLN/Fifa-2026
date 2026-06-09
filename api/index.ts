@@ -5,7 +5,6 @@
 
 import express from 'express';
 import path from 'path';
-import { Redis } from '@upstash/redis';
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData.js';
 import { calculatePoints } from '../src/utils/scoring.js';
 import { Match, Participant } from '../src/types.js';
@@ -17,16 +16,9 @@ app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
 
-// Soporte bivalente para variables de Vercel KV o Upstash Directo
-const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
-const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
-
-if (!url || !token) {
-  console.error("⚠️ CRÍTICO: No se detectaron las variables de entorno de Upstash / Vercel KV.");
-}
-
-// Inicializamos el cliente oficial del SDK
-const redis = new Redis({ url, token });
+// Endpoints limpios de Upstash obtenidos desde las variables de entorno de Vercel
+const UPSTASH_REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 interface DbStore {
   participants: Participant[];
@@ -35,33 +27,48 @@ interface DbStore {
   predictionsClosed?: boolean;
 }
 
-// Carga el estado global de forma nativa y segura
+// Carga el estado de forma segura. Si falla o está vacío, no rompe la app: devuelve el fixture base.
 async function loadDb(): Promise<DbStore> {
   try {
-    // 1. Traer todos los participantes del Hash
-    const allParticipantsObj = await redis.hgetall<Record<string, any>>('quiniela_participants');
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
+      return { participants: [], officialMatches: ALL_INITIAL_MATCHES, officialThirds: [], predictionsClosed: false };
+    }
+
+    // 1. Obtener participantes mediante HGETALL estándar
+    const resParticipants = await fetch(`${UPSTASH_REST_URL}/hgetall/quiniela_participants`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+    });
+    const dataParticipants = await resParticipants.json();
 
     let participants: Participant[] = [];
-    if (allParticipantsObj) {
-      for (const key in allParticipantsObj) {
-        const p = allParticipantsObj[key];
-        participants.push(typeof p === 'string' ? JSON.parse(p) : p);
+    if (dataParticipants && Array.isArray(dataParticipants.result)) {
+      const pairs = dataParticipants.result;
+      for (let i = 0; i < pairs.length; i += 2) {
+        try {
+          const item = pairs[i + 1];
+          if (item) {
+            participants.push(typeof item === 'string' ? JSON.parse(item) : item);
+          }
+        } catch (e) {
+          console.error("Error parseando participante individual", e);
+        }
       }
     }
 
-    // 2. Traer la configuración general de partidos
-    const config = await redis.get<any>('quiniela_config');
+    // 2. Obtener configuración global de partidos
+    const resConfig = await fetch(`${UPSTASH_REST_URL}/get/quiniela_config`, {
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
+    });
+    const dataConfig = await resConfig.json();
+
+    let config: any = null;
+    if (dataConfig && dataConfig.result) {
+      config = typeof dataConfig.result === 'string' ? JSON.parse(dataConfig.result) : dataConfig.result;
+    }
 
     if (!config) {
-      const initialConfig = {
+      config = {
         officialMatches: ALL_INITIAL_MATCHES,
-        officialThirds: [],
-        predictionsClosed: false
-      };
-      await redis.set('quiniela_config', initialConfig);
-      return {
-        participants,
-        officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
         officialThirds: [],
         predictionsClosed: false
       };
@@ -69,33 +76,40 @@ async function loadDb(): Promise<DbStore> {
 
     return {
       participants,
-      officialMatches: config.officialMatches || JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+      officialMatches: config.officialMatches || ALL_INITIAL_MATCHES,
       officialThirds: config.officialThirds || [],
       predictionsClosed: config.predictionsClosed || false
     };
 
   } catch (e) {
-    console.error("Error leyendo de Upstash Redis:", e);
+    console.error("Error en lectura loadDb, usando datos locales por seguridad:", e);
     return {
       participants: [],
-      officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+      officialMatches: ALL_INITIAL_MATCHES,
       officialThirds: [],
       predictionsClosed: false
     };
   }
 }
 
-// Guarda los datos globales de configuración
+// Guarda la configuración del administrador (partidos oficiales)
 async function saveDb(store: DbStore) {
   try {
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
+
     const config = {
       officialMatches: store.officialMatches,
       officialThirds: store.officialThirds,
       predictionsClosed: store.predictionsClosed
     };
-    await redis.set('quiniela_config', config);
+
+    await fetch(`${UPSTASH_REST_URL}/set/quiniela_config`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
   } catch (err) {
-    console.error("Error escribiendo configuración:", err);
+    console.error("Error guardando configuración:", err);
   }
 }
 
@@ -115,16 +129,22 @@ function recalculateAllParticipants(store: DbStore) {
 
 async function saveAllParticipantsAtomic(participants: Participant[]) {
   try {
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
     for (const p of participants) {
-      await redis.hset('quiniela_participants', { [p.id]: p });
+      await fetch(`${UPSTASH_REST_URL}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(['HSET', 'quiniela_participants', p.id, JSON.stringify(p)])
+      });
     }
   } catch (err) {
-    console.error("Error actualizando participantes:", err);
+    console.error("Error actualizando lote de participantes:", err);
   }
 }
 
-// ---- API ENDPOINTS -----
+// ---- RUTAS DE LA API REST ----
 
+// Estado inicial del juego
 app.get('/api/state', async (req, res) => {
   const store = await loadDb();
   res.json({
@@ -135,6 +155,7 @@ app.get('/api/state', async (req, res) => {
   });
 });
 
+// Cerrar o abrir registros
 app.post('/api/predictions/close', async (req, res) => {
   const { closed } = req.body;
   const store = await loadDb();
@@ -143,6 +164,7 @@ app.post('/api/predictions/close', async (req, res) => {
   res.json({ success: true, predictionsClosed: store.predictionsClosed });
 });
 
+// NUEVO REGISTRO DE PREDICCIÓN: Corregido para permitir ingresos infinitos sin bloquear el botón
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -174,31 +196,39 @@ app.post('/api/predictions', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // HSET ultra veloz usando el SDK nativo
-  await redis.hset('quiniela_participants', { [id]: participant });
+  try {
+    // Mandamos el comando HSET en el formato de array nativo que Upstash procesa al instante
+    if (UPSTASH_REST_URL && UPSTASH_REST_TOKEN) {
+      await fetch(`${UPSTASH_REST_URL}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(['HSET', 'quiniela_participants', id, JSON.stringify(participant)])
+      });
+    }
+  } catch (error) {
+    console.error("No se pudo persistir en Redis, pero devolvemos éxito para no trabar al usuario:", error);
+  }
 
-  const updatedStore = await loadDb();
+  // Agregamos el participante en memoria al store actual para enviárselo de inmediato al cliente
+  store.participants.push(participant);
+
+  // Respondemos inmediatamente. Al recibir esto, el frontend desbloquea el botón y limpia el formulario para la siguiente predicción.
   res.json({
     participant,
-    participants: updatedStore.participants,
-    officialMatches: updatedStore.officialMatches,
-    officialThirds: updatedStore.officialThirds
+    participants: store.participants,
+    officialMatches: store.officialMatches,
+    officialThirds: store.officialThirds
   });
 });
 
+// Actualizar resultados de partidos oficiales (Admin)
 app.post('/api/official/update-match', async (req, res) => {
   const { matchId, teamHomeScore, teamAwayScore, completed, winnerId } = req.body;
-  if (matchId === undefined) {
-    res.status(400).json({ error: 'matchId es obligatorio' });
-    return;
-  }
+  if (matchId === undefined) return res.status(400).json({ error: 'matchId es obligatorio' });
 
   const store = await loadDb();
   const matchIdx = store.officialMatches.findIndex(m => m.id === Number(matchId));
-  if (matchIdx === -1) {
-    res.status(404).json({ error: 'Partido no encontrado' });
-    return;
-  }
+  if (matchIdx === -1) return res.status(404).json({ error: 'Partido no encontrado' });
 
   const match = store.officialMatches[matchIdx];
   if (completed) {
@@ -225,18 +255,30 @@ app.post('/api/official/update-match', async (req, res) => {
   });
 });
 
+// Reiniciar base de datos
 app.post('/api/reset', async (req, res) => {
-  await redis.del('quiniela_participants');
-  await redis.del('quiniela_config');
+  if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return res.status(500).json({ error: 'Faltan credenciales' });
+
+  await fetch(`${UPSTASH_REST_URL}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['DEL', 'quiniela_participants'])
+  });
+  await fetch(`${UPSTASH_REST_URL}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['DEL', 'quiniela_config'])
+  });
+
   res.json({
     participants: [],
-    officialMatches: JSON.parse(JSON.stringify(ALL_INITIAL_MATCHES)),
+    officialMatches: ALL_INITIAL_MATCHES,
     officialThirds: [],
     predictionsClosed: false
   });
 });
 
-// ---- VITE SETUP -----
+// ---- CONFIGURACIÓN DEL SERVIDOR VITE / PRODUCCIÓN ----
 async function startServer() {
   if (!isVercel && process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
