@@ -29,34 +29,41 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Navigation active tab: 'quiniela' | 'leaderboard' | 'sincronizador'
   const [activeTab, setActiveTab] = useState<'quiniela' | 'leaderboard' | 'sincronizador'>('quiniela');
-
-  // Quiniela sub-view: 'group' | 'bracket'
   const [quinielaSubView, setQuinielaSubView] = useState<'group' | 'bracket'>('group');
-
-  // Backend state
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [officialMatches, setOfficialMatches] = useState<Match[]>([]);
   const [officialThirds, setOfficialThirds] = useState<string[]>([]);
   const [predictionsClosed, setPredictionsClosed] = useState<boolean>(false);
   const [loadingState, setLoadingState] = useState<boolean>(true);
   const [errorText, setErrorText] = useState<string | null>(null);
-
-  // Local (current user) state
   const [userName, setUserName] = useState<string>('');
   const [userGroupPicks, setUserGroupPicks] = useState<{ [matchId: number]: MatchPick }>({});
   const [userBracketPicks, setUserBracketPicks] = useState<{ [matchId: number]: MatchPick }>({});
   const [userSelectedThirds, setUserSelectedThirds] = useState<string[]>([]);
-
   const [isSavedLocally, setIsSavedLocally] = useState<boolean>(false);
   const [shareSuccess, setShareSuccess] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Comparison / Read-only detail mode state
   const [compareParticipant, setCompareParticipant] = useState<Participant | null>(null);
 
-  // Load from database state on init
+  // Admin PIN state
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<boolean>(false);
+
+  const ADMIN_PIN = '0707'; // ← cambia este número por tu PIN secreto
+
+  const handlePinSubmit = () => {
+    if (pinInput === ADMIN_PIN) {
+      setAdminUnlocked(true);
+      setPinError(false);
+      setPinInput('');
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  };
+
   const fetchState = async () => {
     try {
       const res = await fetch('/api/state');
@@ -69,7 +76,6 @@ export default function App() {
     } catch (e) {
       console.error(e);
       setErrorText('No se pudo establecer conexión con el servidor. Se cargará un estado desconectado.');
-      // Offline safety fallback
       setOfficialMatches(ALL_INITIAL_MATCHES);
     } finally {
       setLoadingState(false);
@@ -78,14 +84,11 @@ export default function App() {
 
   useEffect(() => {
     fetchState();
-
-    // Recover local draft if any exists in localStorage
     const savedName = localStorage.getItem('quiniela_userName');
     const savedGroup = localStorage.getItem('quiniela_groupPicks');
     const savedBracket = localStorage.getItem('quiniela_bracketPicks');
     const savedThirds = localStorage.getItem('quiniela_selectedThirds');
     const savedSuccess = localStorage.getItem('quiniela_hasSaved');
-
     if (savedName) setUserName(savedName);
     if (savedGroup) setUserGroupPicks(JSON.parse(savedGroup));
     if (savedBracket) setUserBracketPicks(JSON.parse(savedBracket));
@@ -93,7 +96,6 @@ export default function App() {
     if (savedSuccess) setIsSavedLocally(true);
   }, []);
 
-  // Save drafts locally
   const persistDraftToStorage = (
     name: string,
     groups: { [id: number]: MatchPick },
@@ -106,7 +108,6 @@ export default function App() {
     localStorage.setItem('quiniela_selectedThirds', JSON.stringify(thirds));
   };
 
-  // Updaters for user's picks
   const handleGroupPickChange = (matchId: number, homeGoals: number | undefined, awayGoals: number | undefined) => {
     const nextGroup = {
       ...userGroupPicks,
@@ -130,7 +131,6 @@ export default function App() {
     persistDraftToStorage(userName, userGroupPicks, userBracketPicks, thirds);
   };
 
-  // Submit picks to the global leaderboard
   const handleSubmitPredictions = async () => {
     if (predictionsClosed) {
       alert('La quiniela está cerrada. No se pueden registrar más predicciones.');
@@ -140,14 +140,11 @@ export default function App() {
       alert('Por favor ingresa un nombre o apodo para registrar tu quiniela.');
       return;
     }
-
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/predictions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: userName,
           groupPicks: userGroupPicks,
@@ -155,33 +152,23 @@ export default function App() {
           selectedThirds: userSelectedThirds,
         }),
       });
-
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Error al guardar la predicción.');
       }
-
       const data = await res.json();
       setParticipants(prev => [...prev, data.participant]);
-
-      // Notify success
       alert(`¡Felicidades, ${userName}! Tu quiniela ha sido registrada con éxito y ya figuras en la Tabla General.`);
-
-      // Clear current quiniela states so the next user/friend can enter their predictions
       setUserName('');
       setUserGroupPicks({});
       setUserBracketPicks({});
       setUserSelectedThirds([]);
       setIsSavedLocally(false);
-
-      // Clean local storage draft fields
       localStorage.removeItem('quiniela_userName');
       localStorage.removeItem('quiniela_groupPicks');
       localStorage.removeItem('quiniela_bracketPicks');
       localStorage.removeItem('quiniela_selectedThirds');
       localStorage.removeItem('quiniela_hasSaved');
-
-      // Go to leaderboard tab to show their newly added score
       setActiveTab('leaderboard');
     } catch (e) {
       console.error(e);
@@ -191,7 +178,6 @@ export default function App() {
     }
   };
 
-  // Admin APIs hook
   const handleUpdateOfficialMatch = async (
     matchId: number,
     teamHomeScore: number | undefined,
@@ -202,9 +188,7 @@ export default function App() {
     try {
       const res = await fetch('/api/official/update-match', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId, teamHomeScore, teamAwayScore, completed, winnerId }),
       });
       if (!res.ok) throw new Error('No se pudo guardar la posición oficial.');
@@ -222,9 +206,7 @@ export default function App() {
     try {
       const res = await fetch('/api/official/update-thirds', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ officialThirds: thirds }),
       });
       if (!res.ok) throw new Error('No se pudieron actualizar los terceros oficiales.');
@@ -247,8 +229,6 @@ export default function App() {
       setOfficialMatches(data.officialMatches);
       setOfficialThirds(data.officialThirds);
       setPredictionsClosed(data.predictionsClosed || false);
-
-      // Clear local storage too
       localStorage.clear();
       setUserName('');
       setUserGroupPicks({});
@@ -265,9 +245,7 @@ export default function App() {
     try {
       const res = await fetch('/api/predictions/close', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ closed }),
       });
       if (!res.ok) throw new Error('No se pudo cambiar el estado de cierre de la quiniela.');
@@ -279,7 +257,6 @@ export default function App() {
     }
   };
 
-  // Seed demo participants for simulation testing
   const handleSeedMockData = async () => {
     const demos = [
       { name: 'Gabriel (Demo 🥇)', ratio: 0.9 },
@@ -288,47 +265,27 @@ export default function App() {
       { name: 'Camila (Demo)', ratio: 0.4 },
       { name: 'Enzo (Demo)', ratio: 0.2 },
     ];
-
     try {
       for (const d of demos) {
-        // Genera picks basados en la fase de grupos oficial (de forma aproximada para darles puntos variados!)
         const fakeGroup: { [mId: number]: MatchPick } = {};
         const fakeBracket: { [mId: number]: MatchPick } = {};
-
         officialMatches.forEach(m => {
           const isGroupM = m.stage === 'group';
-          // Seamos consistentes con el ratio para simular exactitud
           const roll = Math.random();
           let goalsH = Math.floor(Math.random() * 4);
           let goalsA = Math.floor(Math.random() * 4);
-
           if (roll < d.ratio && m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined) {
-            // Predict exact score
             goalsH = m.teamHomeScore;
             goalsA = m.teamAwayScore;
           } else if (roll < d.ratio + 0.15 && m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined) {
-            // Predict winner correctly but not exact
             const trend = m.teamHomeScore > m.teamAwayScore ? 'home' : m.teamHomeScore < m.teamAwayScore ? 'away' : 'draw';
-            if (trend === 'home') {
-              goalsH = m.teamHomeScore + 1;
-              goalsA = m.teamHomeScore;
-            } else if (trend === 'away') {
-              goalsH = m.teamAwayScore;
-              goalsA = m.teamAwayScore + 1;
-            } else {
-              goalsH = m.teamHomeScore + 1;
-              goalsA = m.teamHomeScore + 1;
-            }
+            if (trend === 'home') { goalsH = m.teamHomeScore + 1; goalsA = m.teamHomeScore; }
+            else if (trend === 'away') { goalsH = m.teamAwayScore; goalsA = m.teamAwayScore + 1; }
+            else { goalsH = m.teamHomeScore + 1; goalsA = m.teamHomeScore + 1; }
           }
-
-          if (isGroupM) {
-            fakeGroup[m.id] = { teamHomeGoals: goalsH, teamAwayGoals: goalsA };
-          } else {
-            fakeBracket[m.id] = { teamHomeGoals: goalsH, teamAwayGoals: goalsA };
-          }
+          if (isGroupM) fakeGroup[m.id] = { teamHomeGoals: goalsH, teamAwayGoals: goalsA };
+          else fakeBracket[m.id] = { teamHomeGoals: goalsH, teamAwayGoals: goalsA };
         });
-
-        // Post to server
         await fetch('/api/predictions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -340,7 +297,6 @@ export default function App() {
           }),
         });
       }
-
       await fetchState();
       alert('¡Se han sembrado 5 amigos ficticios con predicciones variadas con éxito! Checa la Tabla General.');
     } catch (e) {
@@ -348,32 +304,18 @@ export default function App() {
     }
   };
 
-  // Invite friends logic (copiar link al portapapeles)
-  const handleCopyInviteLink = () => {
-    const origin = window.location.origin;
-    navigator.clipboard.writeText(`¡Te invito a jugar a mi Quiniela del Mundial 2026! Entra aquí, llena tus predicciones de todo el fixture desde grupos hasta la final en tu celular y compitamos: ${origin}`);
-    setShareSuccess(true);
-    setTimeout(() => setShareSuccess(false), 3000);
-  };
-
-  // Check state counts
   const groupMatches = officialMatches.filter(m => m.stage === 'group');
   const bracketMatches = officialMatches.filter(m => m.stage !== 'group');
-
   const filledGroupPicksCount = groupMatches.filter(
     m => userGroupPicks[m.id]?.teamHomeGoals !== undefined && userGroupPicks[m.id]?.teamAwayGoals !== undefined
   ).length;
-
   const isGroupStageFullyFilled = filledGroupPicksCount === groupMatches.length;
 
-  // Render method
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800" id="main-application-stage">
 
-      {/* HEADER DE LA APP */}
       <header className="bg-slate-900 border-b border-slate-800 text-white py-4 px-6 shadow-md sticky top-0 z-40" id="header-section">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-
           <div className="flex items-center gap-3">
             <span className="p-2.5 bg-emerald-500 text-slate-950 rounded-2xl flex items-center justify-center font-extrabold shadow-md transform rotate-3">
               <Trophy className="w-5 h-5 shrink-0" />
@@ -384,17 +326,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* MENÚ DE PESTAÑAS (MILARES A LA IMAGEN) */}
           <nav className="flex bg-slate-800 rounded-2xl p-1 shadow-inner" id="main-tabs-navigation">
             <button
               onClick={() => {
                 setActiveTab('quiniela');
                 setCompareParticipant(null);
+                setAdminUnlocked(false);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'quiniela' && !compareParticipant
-                ? 'bg-emerald-500 text-slate-950 shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'quiniela' && !compareParticipant ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-700/60'}`}
             >
               <CupIcon className="w-3.5 h-3.5 shrink-0" /> MI QUINIELA
             </button>
@@ -402,11 +341,9 @@ export default function App() {
               onClick={() => {
                 setActiveTab('leaderboard');
                 setCompareParticipant(null);
+                setAdminUnlocked(false);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'leaderboard'
-                ? 'bg-emerald-500 text-slate-950 shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'leaderboard' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-700/60'}`}
             >
               <User className="w-3.5 h-3.5 shrink-0" /> TABLA GENERAL
             </button>
@@ -415,19 +352,14 @@ export default function App() {
                 setActiveTab('sincronizador');
                 setCompareParticipant(null);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'sincronizador'
-                ? 'bg-emerald-500 text-slate-950 shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'sincronizador' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-700/60'}`}
             >
               <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-[spin_10s_linear_infinite]" /> SINCRONIZADOR API
             </button>
           </nav>
-
         </div>
       </header>
 
-      {/* MENSAJE DE ADVERTENCIA OFFLINE SI EXISTE */}
       {errorText && (
         <div className="max-w-7xl mx-auto mt-4 px-6">
           <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-xs font-medium flex items-center gap-2">
@@ -437,7 +369,6 @@ export default function App() {
         </div>
       )}
 
-      {/* CARGA INICIAL STATUS */}
       {loadingState ? (
         <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 text-slate-400">
           <RefreshCw className="w-8 h-8 animate-spin text-emerald-600" />
@@ -445,10 +376,8 @@ export default function App() {
         </div>
       ) : (
         <main className="max-w-7xl mx-auto px-6 py-6" id="main-content-layout">
-
           <AnimatePresence mode="wait">
 
-            {/* COMPARAR / INSPECCIONAR PREDICCIÓN DE OTRO COMPAÑERO */}
             {compareParticipant && (
               <motion.div
                 key="compare-mode-wrapper"
@@ -467,13 +396,11 @@ export default function App() {
                       <h4 className="text-lg font-black mt-1 leading-none">{compareParticipant.name}</h4>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-4">
                     <div className="text-right hidden sm:block">
                       <span className="text-xs text-slate-400 block">Puntaje Total</span>
                       <span className="text-xl font-black text-emerald-400">{compareParticipant.totalPoints} pts</span>
                     </div>
-
                     <button
                       onClick={() => setCompareParticipant(null)}
                       className="py-1.5 px-4 bg-indigo-600 hover:bg-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1 shrink-0"
@@ -483,19 +410,16 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Sub-selector de vista para inspeccionar */}
                 <div className="flex bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200/50 max-w-sm">
                   <button
                     onClick={() => setQuinielaSubView('group')}
-                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all ${quinielaSubView === 'group' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:text-slate-800'
-                      }`}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all ${quinielaSubView === 'group' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:text-slate-800'}`}
                   >
                     Fase de Grupos (Inspección)
                   </button>
                   <button
                     onClick={() => setQuinielaSubView('bracket')}
-                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all ${quinielaSubView === 'bracket' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:text-slate-800'
-                      }`}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-xl transition-all ${quinielaSubView === 'bracket' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:text-slate-800'}`}
                   >
                     Fases Finales (Inspección)
                   </button>
@@ -525,7 +449,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* VISTA: MI QUINIELA PRINCIPAL */}
             {activeTab === 'quiniela' && !compareParticipant && (
               <motion.div
                 key="quiniela-tab-wrapper"
@@ -539,32 +462,23 @@ export default function App() {
                 ) : (
                   <>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-
-                      {/* Selector Sub-pestanas */}
                       <div className="flex bg-slate-250 bg-slate-200/50 rounded-2xl p-1 max-w-xs border border-slate-300/30">
                         <button
                           type="button"
                           onClick={() => setQuinielaSubView('group')}
-                          className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'group'
-                            ? 'bg-slate-950 text-white shadow-sm'
-                            : 'text-slate-500 hover:text-slate-800'
-                            }`}
+                          className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'group' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           FASE DE GRUPOS
                         </button>
                         <button
                           type="button"
                           onClick={() => setQuinielaSubView('bracket')}
-                          className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'bracket'
-                            ? 'bg-slate-950 text-white shadow-sm'
-                            : 'text-slate-500 hover:text-slate-800'
-                            }`}
+                          className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'bracket' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           FASES FINALES
                         </button>
                       </div>
 
-                      {/* INDICADOR DE PROGRESO DE LLENADO */}
                       <div className="flex items-center gap-3 bg-white border border-slate-150 p-4 rounded-2xl shadow-sm text-xs max-w-sm" id="progress-indicator">
                         <div className="relative w-12 h-12 flex items-center justify-center bg-emerald-50 rounded-full text-emerald-600 font-extrabold">
                           <span>{Math.round((filledGroupPicksCount / 72) * 100)}%</span>
@@ -576,7 +490,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* BOTÓN Y PANEL PARA SALVAGUARDAR QUINIELA (RECOGEDOR DE NOMBRE) */}
                     <div className="bg-emerald-950 text-emerald-100 p-6 rounded-3xl border border-emerald-900 shadow-xl" id="save-quiniela-action">
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         <div>
@@ -586,7 +499,7 @@ export default function App() {
                                 <LockOpen className="w-4 h-4" />
                               </span>
                             ) : (
-                              <span className="p-1.5 bg-emerald-150 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center">
+                              <span className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center">
                                 <Lock className="w-4 h-4" />
                               </span>
                             )}
@@ -614,7 +527,6 @@ export default function App() {
                               className="w-full pl-10 pr-4 py-3 bg-emerald-900/60 disabled:bg-emerald-950/20 disabled:text-emerald-500 border border-emerald-800 disabled:border-emerald-950 rounded-2xl text-sm font-semibold text-white placeholder-emerald-400/80 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
                             />
                           </div>
-
                           <button
                             type="button"
                             onClick={handleSubmitPredictions}
@@ -658,7 +570,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* VISTA: TABLA GENERAL */}
             {activeTab === 'leaderboard' && !compareParticipant && (
               <motion.div
                 key="leaderboard-tab-wrapper"
@@ -670,14 +581,11 @@ export default function App() {
                 <Leaderboard
                   participants={participants}
                   officialMatches={officialMatches}
-                  onSelectParticipantForView={(p) => {
-                    setCompareParticipant(p);
-                  }}
+                  onSelectParticipantForView={(p) => { setCompareParticipant(p); }}
                 />
               </motion.div>
             )}
 
-            {/* VISTA: SINCRONIZADOR API (ADMIN) */}
             {activeTab === 'sincronizador' && !compareParticipant && (
               <motion.div
                 key="sincronizador-tab-wrapper"
@@ -686,26 +594,56 @@ export default function App() {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-                <Sincronizador
-                  officialMatches={officialMatches}
-                  officialThirds={officialThirds}
-                  participants={participants}
-                  onUpdateMatch={handleUpdateOfficialMatch}
-                  onUpdateThirds={handleUpdateOfficialThirds}
-                  onResetAll={handleResetAll}
-                  onSeedData={handleSeedMockData}
-                  predictionsClosed={predictionsClosed}
-                  onTogglePredictionsClosed={handleTogglePredictionsClosed}
-                />
+                {!adminUnlocked ? (
+                  <div className="min-h-[50vh] flex flex-col items-center justify-center gap-6">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm max-w-sm w-full space-y-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="p-2.5 bg-slate-900 text-white rounded-2xl">
+                          <Lock className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <h3 className="font-black text-slate-900">Área Restringida</h3>
+                          <p className="text-xs text-slate-400">Ingresa el PIN de administrador</p>
+                        </div>
+                      </div>
+                      <input
+                        type="password"
+                        placeholder="PIN"
+                        value={pinInput}
+                        onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+                        onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+                        className={`w-full py-3 px-4 border rounded-2xl text-center font-extrabold text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500 ${pinError ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                      />
+                      {pinError && <p className="text-xs text-rose-500 text-center font-semibold">PIN incorrecto. Intenta de nuevo.</p>}
+                      <button
+                        type="button"
+                        onClick={handlePinSubmit}
+                        className="w-full py-3 bg-slate-900 hover:bg-slate-700 text-white font-extrabold rounded-2xl transition-all"
+                      >
+                        Acceder
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <Sincronizador
+                    officialMatches={officialMatches}
+                    officialThirds={officialThirds}
+                    participants={participants}
+                    onUpdateMatch={handleUpdateOfficialMatch}
+                    onUpdateThirds={handleUpdateOfficialThirds}
+                    onResetAll={handleResetAll}
+                    onSeedData={handleSeedMockData}
+                    predictionsClosed={predictionsClosed}
+                    onTogglePredictionsClosed={handleTogglePredictionsClosed}
+                  />
+                )}
               </motion.div>
             )}
 
           </AnimatePresence>
-
         </main>
       )}
 
-      {/* FOOTER */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-500 py-10 mt-16 text-center text-xs font-semibold" id="footer-section">
         <div className="max-w-7xl mx-auto px-6 space-y-2">
           <p>© 2026 Quiniela de Fútbol Mundial 2026. Todos los derechos reservados.</p>
