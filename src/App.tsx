@@ -427,34 +427,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* DETALLE COMPARTIR CON UN AMIGO BANNER */}
-      <div className="bg-emerald-50 border-b border-emerald-100 py-3 px-6 text-emerald-950 shadow-sm" id="invite-bar">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
-            <UserPlus className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-            <span>¿Quiere jugar con tu grupo de amigos? Invítalos a llenar su cartón compartiendo el enlace.</span>
-          </div>
-
-          <button
-            onClick={handleCopyInviteLink}
-            className={`py-1.5 px-4 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all focus:outline-none ${shareSuccess
-              ? 'bg-teal-600 text-white'
-              : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md'
-              }`}
-          >
-            {shareSuccess ? (
-              <>
-                <CheckCircle className="w-3.5 h-3.5 shrink-0" /> ¡Enlace Copiado!
-              </>
-            ) : (
-              <>
-                <Share2 className="w-3.5 h-3.5 shrink-0" /> Copiar Enlace Invitación
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
       {/* MENSAJE DE ADVERTENCIA OFFLINE SI EXISTE */}
       {errorText && (
         <div className="max-w-7xl mx-auto mt-4 px-6">
