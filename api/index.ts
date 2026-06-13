@@ -7,7 +7,7 @@ import express from 'express';
 import path from 'path';
 import { ALL_INITIAL_MATCHES } from '../src/data/worldCupData.js';
 import { calculatePoints } from '../src/utils/scoring.js';
-import { Match, Participant } from '../src/types.js';
+import { Match, Participant, ActivePhase } from '../src/types.js';
 
 const app = express();
 const PORT = 3000;
@@ -16,7 +16,6 @@ app.use(express.json());
 
 const isVercel = !!process.env.VERCEL;
 
-// Endpoints limpios de Upstash obtenidos desde las variables de entorno de Vercel
 const UPSTASH_REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -25,21 +24,19 @@ interface DbStore {
   officialMatches: Match[];
   officialThirds: string[];
   predictionsClosed?: boolean;
+  activePhase?: ActivePhase;
 }
 
-// Carga el estado de forma segura. Si falla o está vacío, no rompe la app: devuelve el fixture base.
 async function loadDb(): Promise<DbStore> {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) {
-      return { participants: [], officialMatches: ALL_INITIAL_MATCHES, officialThirds: [], predictionsClosed: false };
+      return { participants: [], officialMatches: ALL_INITIAL_MATCHES, officialThirds: [], predictionsClosed: false, activePhase: 'group' };
     }
 
-    // 1. Obtener participantes mediante HGETALL estándar
     const resParticipants = await fetch(`${UPSTASH_REST_URL}/hgetall/quiniela_participants`, {
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
     const dataParticipants = await resParticipants.json();
-    console.log('HGETALL respuesta:', JSON.stringify(dataParticipants));
 
     let participants: Participant[] = [];
     if (dataParticipants && Array.isArray(dataParticipants.result)) {
@@ -56,7 +53,6 @@ async function loadDb(): Promise<DbStore> {
       }
     }
 
-    // 2. Obtener configuración global de partidos
     const resConfig = await fetch(`${UPSTASH_REST_URL}/get/quiniela_config`, {
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}` }
     });
@@ -71,7 +67,8 @@ async function loadDb(): Promise<DbStore> {
       config = {
         officialMatches: ALL_INITIAL_MATCHES,
         officialThirds: [],
-        predictionsClosed: false
+        predictionsClosed: false,
+        activePhase: 'group'
       };
     }
 
@@ -79,21 +76,22 @@ async function loadDb(): Promise<DbStore> {
       participants,
       officialMatches: config.officialMatches || ALL_INITIAL_MATCHES,
       officialThirds: config.officialThirds || [],
-      predictionsClosed: config.predictionsClosed || false
+      predictionsClosed: config.predictionsClosed || false,
+      activePhase: config.activePhase || 'group'
     };
 
   } catch (e) {
-    console.error("Error en lectura loadDb, usando datos locales por seguridad:", e);
+    console.error("Error en lectura loadDb:", e);
     return {
       participants: [],
       officialMatches: ALL_INITIAL_MATCHES,
       officialThirds: [],
-      predictionsClosed: false
+      predictionsClosed: false,
+      activePhase: 'group'
     };
   }
 }
 
-// Guarda la configuración del administrador (partidos oficiales)
 async function saveDb(store: DbStore) {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
@@ -101,7 +99,8 @@ async function saveDb(store: DbStore) {
     const config = {
       officialMatches: store.officialMatches,
       officialThirds: store.officialThirds,
-      predictionsClosed: store.predictionsClosed
+      predictionsClosed: store.predictionsClosed,
+      activePhase: store.activePhase
     };
 
     await fetch(`${UPSTASH_REST_URL}/set/quiniela_config`, {
@@ -116,16 +115,31 @@ async function saveDb(store: DbStore) {
 
 function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
-    const breakdown = calculatePoints(p.groupPicks, store.officialMatches);
+    const groupBreakdown = calculatePoints(p.groupPicks, store.officialMatches);
     const bracketBreakdown = calculatePoints(p.bracketPicks, store.officialMatches);
 
     return {
       ...p,
-      totalPoints: breakdown.totalPoints + bracketBreakdown.totalPoints,
-      exactCount: breakdown.exactCount + bracketBreakdown.exactCount,
-      outcomeCount: breakdown.outcomeCount + bracketBreakdown.outcomeCount
+      totalPoints: groupBreakdown.totalPoints + bracketBreakdown.totalPoints,
+      exactCount: groupBreakdown.exactCount + bracketBreakdown.exactCount,
+      outcomeCount: groupBreakdown.outcomeCount + bracketBreakdown.outcomeCount
     };
   });
+}
+
+async function saveParticipant(participant: Participant) {
+  try {
+    if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
+    await fetch(`${UPSTASH_REST_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        ['HSET', 'quiniela_participants', participant.id, JSON.stringify(participant)]
+      ])
+    });
+  } catch (err) {
+    console.error("Error guardando participante:", err);
+  }
 }
 
 async function saveAllParticipantsAtomic(participants: Participant[]) {
@@ -155,7 +169,8 @@ app.get('/api/state', async (req, res) => {
     participants: store.participants,
     officialMatches: store.officialMatches,
     officialThirds: store.officialThirds,
-    predictionsClosed: store.predictionsClosed || false
+    predictionsClosed: store.predictionsClosed || false,
+    activePhase: store.activePhase || 'group'
   });
 });
 
@@ -163,14 +178,12 @@ app.get('/api/state', async (req, res) => {
 app.post('/api/predictions/close', async (req, res) => {
   const { closed } = req.body;
   const store = await loadDb();
-  console.log('UPSTASH_URL:', UPSTASH_REST_URL);
-  console.log('UPSTASH_TOKEN:', UPSTASH_REST_TOKEN ? 'existe' : 'NO EXISTE');
   store.predictionsClosed = !!closed;
   await saveDb(store);
   res.json({ success: true, predictionsClosed: store.predictionsClosed });
 });
 
-// NUEVO REGISTRO DE PREDICCIÓN: Corregido para permitir ingresos infinitos sin bloquear el botón
+// Registro inicial de predicción (fase de grupos)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -199,14 +212,12 @@ app.post('/api/predictions', async (req, res) => {
     totalPoints: groupPts.totalPoints + bracketPts.totalPoints,
     exactCount: groupPts.exactCount + bracketPts.exactCount,
     outcomeCount: groupPts.outcomeCount + bracketPts.outcomeCount,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    completedPhases: ['group']
   };
 
   try {
-    // Mandamos el comando HSET en el formato de array nativo que Upstash procesa al instante
     if (UPSTASH_REST_URL && UPSTASH_REST_TOKEN) {
-      console.log('URL:', UPSTASH_REST_URL);
-      console.log('TOKEN:', UPSTASH_REST_TOKEN ? UPSTASH_REST_TOKEN.substring(0, 20) + '...' : 'NO EXISTE');
       const upstashRes = await fetch(`${UPSTASH_REST_URL}/pipeline`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
@@ -218,18 +229,107 @@ app.post('/api/predictions', async (req, res) => {
       console.log('Respuesta Upstash HSET:', JSON.stringify(upstashData));
     }
   } catch (error) {
-    console.error("No se pudo persistir en Redis, pero devolvemos éxito para no trabar al usuario:", error);
+    console.error("No se pudo persistir en Redis:", error);
   }
 
-  // Agregamos el participante en memoria al store actual para enviárselo de inmediato al cliente
   store.participants.push(participant);
 
-  // Respondemos inmediatamente. Al recibir esto, el frontend desbloquea el botón y limpia el formulario para la siguiente predicción.
   res.json({
     participant,
     participants: store.participants,
     officialMatches: store.officialMatches,
-    officialThirds: store.officialThirds
+    officialThirds: store.officialThirds,
+    activePhase: store.activePhase || 'group'
+  });
+});
+
+// Actualizar predicciones de bracket de un participante existente
+app.post('/api/predictions/:id/bracket', async (req, res) => {
+  const { id } = req.params;
+  const { bracketPicks, selectedThirds, phase } = req.body;
+
+  if (!phase) {
+    res.status(400).json({ error: 'La fase es obligatoria' });
+    return;
+  }
+
+  const store = await loadDb();
+
+  if (store.predictionsClosed) {
+    res.status(400).json({ error: 'La quiniela está cerrada.' });
+    return;
+  }
+
+  const participantIdx = store.participants.findIndex(p => p.id === id);
+  if (participantIdx === -1) {
+    res.status(404).json({ error: 'Participante no encontrado' });
+    return;
+  }
+
+  const p = store.participants[participantIdx];
+
+  // Verificar que no haya completado ya esta fase
+  if (p.completedPhases?.includes(phase)) {
+    res.status(400).json({ error: 'Ya completaste las predicciones de esta fase.' });
+    return;
+  }
+
+  // Actualizar predicciones de bracket mezclando con las existentes
+  const updatedBracketPicks = {
+    ...p.bracketPicks,
+    ...(bracketPicks || {})
+  };
+
+  const updatedSelectedThirds = selectedThirds || p.selectedThirds;
+
+  // Recalcular puntos
+  const groupPts = calculatePoints(p.groupPicks, store.officialMatches);
+  const bracketPts = calculatePoints(updatedBracketPicks, store.officialMatches);
+
+  const updatedParticipant: Participant = {
+    ...p,
+    bracketPicks: updatedBracketPicks,
+    selectedThirds: updatedSelectedThirds,
+    totalPoints: groupPts.totalPoints + bracketPts.totalPoints,
+    exactCount: groupPts.exactCount + bracketPts.exactCount,
+    outcomeCount: groupPts.outcomeCount + bracketPts.outcomeCount,
+    completedPhases: [...(p.completedPhases || ['group']), phase]
+  };
+
+  store.participants[participantIdx] = updatedParticipant;
+
+  await saveParticipant(updatedParticipant);
+
+  res.json({
+    participant: updatedParticipant,
+    participants: store.participants,
+    officialMatches: store.officialMatches,
+    officialThirds: store.officialThirds,
+    activePhase: store.activePhase || 'group'
+  });
+});
+
+// Avanzar a la siguiente fase
+app.post('/api/advance-phase', async (req, res) => {
+  const { phase } = req.body;
+
+  const validPhases: ActivePhase[] = ['group', 'r32', 'r16', 'qf', 'sf', 'final'];
+  if (!phase || !validPhases.includes(phase)) {
+    res.status(400).json({ error: 'Fase inválida' });
+    return;
+  }
+
+  const store = await loadDb();
+  store.activePhase = phase;
+  store.predictionsClosed = false; // Reabre automáticamente para la nueva fase
+
+  await saveDb(store);
+
+  res.json({
+    success: true,
+    activePhase: store.activePhase,
+    predictionsClosed: store.predictionsClosed,
+    participants: store.participants
   });
 });
 
@@ -263,7 +363,24 @@ app.post('/api/official/update-match', async (req, res) => {
     success: true,
     officialMatches: store.officialMatches,
     participants: store.participants,
-    officialThirds: store.officialThirds
+    officialThirds: store.officialThirds,
+    activePhase: store.activePhase || 'group'
+  });
+});
+
+// Actualizar terceros oficiales
+app.post('/api/official/update-thirds', async (req, res) => {
+  const { officialThirds } = req.body;
+  const store = await loadDb();
+  store.officialThirds = officialThirds || [];
+  await saveDb(store);
+
+  res.json({
+    success: true,
+    officialMatches: store.officialMatches,
+    officialThirds: store.officialThirds,
+    participants: store.participants,
+    activePhase: store.activePhase || 'group'
   });
 });
 
@@ -271,22 +388,24 @@ app.post('/api/official/update-match', async (req, res) => {
 app.post('/api/reset', async (req, res) => {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return res.status(500).json({ error: 'Faltan credenciales' });
 
-  await fetch(`${UPSTASH_REST_URL}`, {
+  await fetch(`${UPSTASH_REST_URL}/pipeline`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['DEL', 'quiniela_participants'])
+    body: JSON.stringify([['DEL', 'quiniela_participants']])
   });
-  await fetch(`${UPSTASH_REST_URL}`, {
+
+  await fetch(`${UPSTASH_REST_URL}/pipeline`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['DEL', 'quiniela_config'])
+    body: JSON.stringify([['DEL', 'quiniela_config']])
   });
 
   res.json({
     participants: [],
     officialMatches: ALL_INITIAL_MATCHES,
     officialThirds: [],
-    predictionsClosed: false
+    predictionsClosed: false,
+    activePhase: 'group'
   });
 });
 

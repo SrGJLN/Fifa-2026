@@ -11,15 +11,17 @@ export interface Team {
 
 export type StageId = 'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final';
 
+export type ActivePhase = 'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'final';
+
 export interface Match {
   id: number;
   stage: StageId;
-  groupLabel?: string; // e.g. 'A', 'B', etc. for group stage
-  teamHomeId: string; // can be team ID or placeholder like '1A', '2B' for bracket matches
+  groupLabel?: string;
+  teamHomeId: string;
   teamAwayId: string;
-  teamHomeScore?: number; // official score
-  teamAwayScore?: number; // official score
-  winnerId?: string; // official winner (for penalty shootout cases)
+  teamHomeScore?: number;
+  teamAwayScore?: number;
+  winnerId?: string;
   date: string;
   time: string;
   venue: string;
@@ -30,7 +32,7 @@ export interface Match {
 export interface MatchPick {
   teamHomeGoals?: number;
   teamAwayGoals?: number;
-  winnerId?: string; // for penalty shootout tie-breaker
+  winnerId?: string;
 }
 
 export interface GroupStanding {
@@ -41,9 +43,9 @@ export interface GroupStanding {
   won: number;
   drawn: number;
   lost: number;
-  gf: number; // goals for
-  ga: number; // goals against
-  gd: number; // goal difference
+  gf: number;
+  ga: number;
+  gd: number;
   points: number;
 }
 
@@ -52,14 +54,23 @@ export interface Participant {
   name: string;
   groupPicks: { [matchId: number]: MatchPick };
   bracketPicks: { [matchId: number]: MatchPick };
-  selectedThirds: string[]; // List of teamIds chosen as 8 best thirds
+  selectedThirds: string[];
   totalPoints: number;
   exactCount: number;
   outcomeCount: number;
   createdAt: string;
+  // Puntos acumulados por fase
+  pointsGroup?: number;
+  pointsR32?: number;
+  pointsR16?: number;
+  pointsQF?: number;
+  pointsSF?: number;
+  pointsFinal?: number;
+  // Control de qué fases ya completó el participante
+  completedPhases?: ActivePhase[];
 }
 
 export interface OfficialData {
   matches: Match[];
-  selectedThirds: string[]; // List of teamIds of the official 8 best thirds
+  selectedThirds: string[];
 }
