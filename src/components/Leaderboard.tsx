@@ -35,13 +35,6 @@ export default function Leaderboard({
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getRankBadge = (idx: number) => {
-    if (idx === 0) return <span className="text-xl">🥇</span>;
-    if (idx === 1) return <span className="text-xl">🥈</span>;
-    if (idx === 2) return <span className="text-xl">🥉</span>;
-    return <span className="text-sm font-semibold text-slate-500 w-6 text-center inline-block">{idx + 1}</span>;
-  };
-
   const phaseLabel: Record<ActivePhase, string> = {
     group: 'Fase de Grupos',
     r32: 'Dieciseisavos',
@@ -51,18 +44,28 @@ export default function Leaderboard({
     final: 'Final'
   };
 
-  // Determina si un participante ya completó la fase activa
-  const hasCompletedPhase = (p: Participant) => {
-    return p.completedPhases?.includes(activePhase) ?? false;
+  const hasCompletedPhase = (p: Participant) => p.completedPhases?.includes(activePhase) ?? false;
+  const showPredictionButton = activePhase !== 'group';
+
+  const getRankEmoji = (idx: number) => {
+    if (idx === 0) return '🥇';
+    if (idx === 1) return '🥈';
+    if (idx === 2) return '🥉';
+    return null;
   };
 
-  const showPredictionButton = activePhase !== 'group';
+  const getAvatarColors = (idx: number) => {
+    if (idx === 0) return 'bg-amber-100 text-amber-800';
+    if (idx === 1) return 'bg-slate-200 text-slate-800';
+    if (idx === 2) return 'bg-orange-100 text-orange-800';
+    return 'bg-indigo-50 text-indigo-700';
+  };
 
   return (
     <div className="space-y-6" id="leaderboard-tab">
 
       {/* Banner Superior */}
-      <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden" id="leaderboard-hero">
+      <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-2">
             <Trophy className="w-5 h-5 text-amber-300" />
@@ -79,16 +82,13 @@ export default function Leaderboard({
         </div>
       </div>
 
-      {/* Banner aviso fase activa */}
+      {/* Banner aviso fase */}
       {showPredictionButton && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center gap-3">
           <ChevronRight className="w-5 h-5 text-indigo-500 shrink-0" />
           <div>
             <p className="text-sm font-bold text-indigo-900">Nueva fase disponible: {phaseLabel[activePhase]}</p>
-            <p className="text-xs text-indigo-600 mt-0.5">
-              Cada participante debe presionar "Completar predicciones" para ingresar sus pronósticos de esta fase.
-              Los participantes que ya completaron aparecen marcados en verde.
-            </p>
+            <p className="text-xs text-indigo-600 mt-0.5">Cada participante debe presionar "Completar" para ingresar sus pronósticos.</p>
           </div>
         </div>
       )}
@@ -110,117 +110,184 @@ export default function Leaderboard({
         </span>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
-        {filteredParticipants.length === 0 ? (
-          <div className="py-20 text-center text-slate-400 font-medium">
-            {searchTerm ? 'No se encontraron amigos con ese nombre.' : 'Aún no hay participantes registrados.'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  <th className="py-4 px-6 text-center w-16">Puesto</th>
-                  <th className="py-4 px-6">Amigo / Jugador</th>
-                  <th className="py-4 px-6 text-center">Score Exacto (x3)</th>
-                  <th className="py-4 px-6 text-center">Ganador (x1)</th>
-                  <th className="py-4 px-6 text-center">Puntaje Total</th>
-                  <th className="py-4 px-6 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-                {filteredParticipants.map((p, idx) => {
-                  const isTop3 = idx < 3;
-                  const completed = hasCompletedPhase(p);
+      {/* Lista */}
+      {filteredParticipants.length === 0 ? (
+        <div className="py-20 text-center text-slate-400 font-medium bg-white border border-slate-100 rounded-3xl">
+          {searchTerm ? 'No se encontraron amigos con ese nombre.' : 'Aún no hay participantes registrados.'}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredParticipants.map((p, idx) => {
+            const completed = hasCompletedPhase(p);
+            const rankEmoji = getRankEmoji(idx);
 
-                  return (
-                    <tr
-                      key={p.id}
-                      className={`hover:bg-slate-50/50 transition-colors ${isTop3 ? 'font-medium bg-slate-50/20' : ''}`}
+            return (
+              <div
+                key={p.id}
+                className={`bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${idx === 0 ? 'border-amber-200 ring-2 ring-amber-100'
+                    : idx === 1 ? 'border-slate-200'
+                      : idx === 2 ? 'border-orange-200'
+                        : 'border-slate-100'
+                  }`}
+              >
+                {/* VISTA DESKTOP — fila horizontal */}
+                <div className="hidden md:flex items-center gap-4 px-6 py-4">
+
+                  {/* Puesto */}
+                  <div className="w-10 flex items-center justify-center shrink-0">
+                    {rankEmoji ? (
+                      <span className="text-2xl">{rankEmoji}</span>
+                    ) : (
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${getAvatarColors(idx)}`}>
+                        {idx + 1}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Nombre */}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${getAvatarColors(idx)}`}>
+                      {p.name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="text-slate-900 font-bold block truncate">{p.name}</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        {showPredictionButton ? (
+                          completed
+                            ? <span className="text-emerald-600 font-semibold">✓ {phaseLabel[activePhase]} completado</span>
+                            : <span className="text-rose-500 font-semibold">⚠ Pendiente: {phaseLabel[activePhase]}</span>
+                        ) : (
+                          `Unido el ${new Date(p.createdAt).toLocaleDateString()}`
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Exactos */}
+                  <div className="w-32 text-center">
+                    <span className="font-mono font-semibold text-emerald-600 text-lg">{p.exactCount}</span>
+                    <span className="text-[10px] text-slate-400 block">Score Exacto</span>
+                  </div>
+
+                  {/* Aciertos */}
+                  <div className="w-32 text-center">
+                    <span className="font-mono font-semibold text-indigo-600 text-lg">{p.outcomeCount}</span>
+                    <span className="text-[10px] text-slate-400 block">Ganador</span>
+                  </div>
+
+                  {/* Puntos */}
+                  <div className="w-28 text-center">
+                    <span className="px-3 py-1 bg-slate-950 text-white rounded-full font-extrabold text-base tracking-tight font-mono">
+                      {p.totalPoints}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-1">pts</span>
+                  </div>
+
+                  {/* Botones */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {showPredictionButton && !completed && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectParticipantForPrediction(p)}
+                        className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" /> Completar
+                      </button>
+                    )}
+                    {showPredictionButton && completed && (
+                      <span className="py-1.5 px-3 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold inline-flex items-center gap-1">
+                        ✓ Listo
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onSelectParticipantForView(p)}
+                      className="py-1.5 px-3 bg-slate-100 hover:bg-slate-950 text-slate-600 hover:text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1"
                     >
-                      {/* Puesto */}
-                      <td className="py-4 px-6 text-center">
-                        {getRankBadge(idx)}
-                      </td>
+                      <Eye className="w-3.5 h-3.5" /> Ver
+                    </button>
+                  </div>
 
-                      {/* Nombre */}
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-amber-100 text-amber-800'
-                              : idx === 1 ? 'bg-slate-200 text-slate-800'
-                                : idx === 2 ? 'bg-orange-100 text-orange-800'
-                                  : 'bg-indigo-50 text-indigo-700'
-                            }`}>
-                            {p.name.charAt(0).toUpperCase()}
+                </div>
+
+                {/* VISTA MÓVIL — tarjeta */}
+                <div className="flex md:hidden flex-col gap-3 p-4">
+
+                  {/* Fila superior */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0">
+                        {rankEmoji ? (
+                          <span className="text-2xl">{rankEmoji}</span>
+                        ) : (
+                          <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${getAvatarColors(idx)}`}>
+                            {idx + 1}
                           </span>
-                          <div>
-                            <span className="text-slate-900 font-bold block">{p.name}</span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
-                              {showPredictionButton ? (
-                                completed
-                                  ? <span className="text-emerald-600 font-semibold">✓ {phaseLabel[activePhase]} completado</span>
-                                  : <span className="text-rose-500 font-semibold">⚠ Pendiente: {phaseLabel[activePhase]}</span>
-                              ) : (
-                                `Unido el ${new Date(p.createdAt).toLocaleDateString()}`
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Aciertos Exactos */}
-                      <td className="py-4 px-6 text-center font-mono font-semibold text-emerald-600">
-                        {p.exactCount}
-                      </td>
-
-                      {/* Aciertos Simples */}
-                      <td className="py-4 px-6 text-center font-mono font-semibold text-indigo-600">
-                        {p.outcomeCount}
-                      </td>
-
-                      {/* Puntaje Total */}
-                      <td className="py-4 px-6 text-center">
-                        <span className="px-3 py-1 bg-slate-950 text-white rounded-full font-extrabold text-base tracking-tight font-mono">
-                          {p.totalPoints}
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-slate-900 font-black text-base block leading-tight">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {showPredictionButton ? (
+                            completed
+                              ? <span className="text-emerald-600 font-semibold">✓ Completado</span>
+                              : <span className="text-rose-500 font-semibold">⚠ Pendiente</span>
+                          ) : (
+                            `Unido el ${new Date(p.createdAt).toLocaleDateString()}`
+                          )}
                         </span>
-                      </td>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-2xl font-black text-slate-900 leading-none block">{p.totalPoints}</span>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">pts</span>
+                    </div>
+                  </div>
 
-                      {/* Acciones */}
-                      <td className="py-4 px-6 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {/* Botón completar predicciones — solo en fases posteriores a grupos */}
-                          {showPredictionButton && !completed && (
-                            <button
-                              type="button"
-                              onClick={() => onSelectParticipantForPrediction(p)}
-                              className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 focus:outline-none"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5" /> Completar
-                            </button>
-                          )}
-                          {showPredictionButton && completed && (
-                            <span className="py-1.5 px-3 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold inline-flex items-center gap-1">
-                              ✓ Listo
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onSelectParticipantForView(p)}
-                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-950 text-slate-600 hover:text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 focus:outline-none"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> Ver
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  {/* Divisor */}
+                  <div className="border-t border-slate-100" />
+
+                  {/* Fila inferior */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex gap-4 text-xs">
+                      <div>
+                        <span className="text-slate-400 block">Exactos</span>
+                        <span className="font-extrabold text-emerald-600 text-sm">{p.exactCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Aciertos</span>
+                        <span className="font-extrabold text-indigo-600 text-sm">{p.outcomeCount}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {showPredictionButton && !completed && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectParticipantForPrediction(p)}
+                          className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" /> Completar
+                        </button>
+                      )}
+                      {showPredictionButton && completed && (
+                        <span className="py-1.5 px-3 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold">✓ Listo</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onSelectParticipantForView(p)}
+                        className="py-1.5 px-3 bg-slate-100 hover:bg-slate-950 text-slate-600 hover:text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Ver
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
     </div>
   );
