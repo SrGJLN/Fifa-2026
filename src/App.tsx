@@ -12,6 +12,7 @@ import BracketStage from './components/BracketStage';
 import Leaderboard from './components/Leaderboard';
 import Sincronizador from './components/Sincronizador';
 import OfficialStandings from './components/OfficialStandings';
+import OfficialR32Table from './components/OfficialR32Table';
 import {
   Trophy,
   CheckCircle,
@@ -529,81 +530,7 @@ export default function App() {
                   />
                 ) : (
                   <>
-                    {activePhase !== 'group' && (
-                      <div className="bg-indigo-900 border border-indigo-800 text-white p-4 rounded-2xl flex items-center gap-3">
-                        <ChevronRight className="w-5 h-5 text-indigo-400 shrink-0" />
-                        <div>
-                          <p className="font-black text-sm">Fase activa: {phaseLabel[activePhase]}</p>
-                          <p className="text-xs text-indigo-300 mt-0.5">Ve a la Tabla General para completar tus predicciones de esta fase.</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex bg-slate-200/50 rounded-2xl p-1 max-w-xs border border-slate-300/30">
-                        <button type="button" onClick={() => setQuinielaSubView('group')} className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'group' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>FASE DE GRUPOS</button>
-                        <button type="button" onClick={() => setQuinielaSubView('bracket')} className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'bracket' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>FASES FINALES</button>
-                      </div>
-                      <div className="flex items-center gap-3 bg-white border border-slate-150 p-4 rounded-2xl shadow-sm text-xs max-w-sm">
-                        <div className="relative w-12 h-12 flex items-center justify-center bg-emerald-50 rounded-full text-emerald-600 font-extrabold">
-                          <span>{Math.round((filledGroupPicksCount / 72) * 100)}%</span>
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800">Llenado Fase de Grupos</p>
-                          <p className="text-slate-400 mt-0.5 font-medium">Predicho {filledGroupPicksCount} de 72 partidos.</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {activePhase === 'group' && (
-                      <div className="bg-emerald-950 text-emerald-100 p-6 rounded-3xl border border-emerald-900 shadow-xl">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                          <div>
-                            <div className="flex items-center gap-2.5 mb-1.5">
-                              {isGroupStageFullyFilled ? (
-                                <span className="p-1.5 bg-emerald-500 text-slate-950 rounded-full"><LockOpen className="w-4 h-4" /></span>
-                              ) : (
-                                <span className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-full"><Lock className="w-4 h-4" /></span>
-                              )}
-                              <h3 className="text-lg font-black tracking-tight text-white leading-none">Guardar mi Quiniela en la Tabla General</h3>
-                            </div>
-                            <p className="text-emerald-200 text-xs leading-relaxed max-w-2xl">
-                              {isGroupStageFullyFilled
-                                ? '¡Excelente! Has llenado los 72 marcadores. Escribe tu nombre para registrar tu quiniela.'
-                                : 'Debes llenar las 72 predicciones de la Fase de Grupos para registrarte.'}
-                            </p>
-                          </div>
-                          <div className="flex flex-col sm:flex-row items-center gap-3 sm:max-w-md w-full">
-                            <div className="relative w-full">
-                              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-300 w-4 h-4" />
-                              <input
-                                type="text"
-                                disabled={!isGroupStageFullyFilled || isSavedLocally}
-                                placeholder={isSavedLocally ? '¡Ya has guardado tu quiniela!' : "Escribe tu nombre o apodo..."}
-                                value={userName}
-                                onChange={(e) => { setUserName(e.target.value); persistDraftToStorage(e.target.value, userGroupPicks, userBracketPicks, userSelectedThirds); }}
-                                className="w-full pl-10 pr-4 py-3 bg-emerald-900/60 disabled:bg-emerald-950/20 disabled:text-emerald-500 border border-emerald-800 disabled:border-emerald-950 rounded-2xl text-sm font-semibold text-white placeholder-emerald-400/80 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleSubmitPredictions}
-                              disabled={!isGroupStageFullyFilled || userName.trim() === '' || isSubmitting || isSavedLocally}
-                              className="py-3 px-6 bg-emerald-500 disabled:bg-emerald-900 hover:bg-emerald-400 text-slate-950 disabled:text-emerald-500 font-extrabold rounded-2xl text-sm tracking-tight transition-all shadow-md shrink-0 w-full sm:w-auto flex items-center justify-center gap-1.5 focus:outline-none cursor-pointer"
-                            >
-                              {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isSavedLocally ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                              {isSavedLocally ? 'Registrado' : 'Guardar'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {quinielaSubView === 'group' ? (
-                      <GroupStage groupMatches={groupMatches} picks={userGroupPicks} onChangePick={handleGroupPickChange} readOnly={false} />
-                    ) : (
-                      <BracketStage bracketMatches={bracketMatches} groupMatches={groupMatches} groupPicks={userGroupPicks} bracketPicks={userBracketPicks} selectedThirds={userSelectedThirds} onChangeBracketPick={handleBracketPickChange} onChangeSelectedThirds={handleSelectedThirdsChange} readOnly={false} />
-                    )}
+                    <OfficialR32Table officialMatches={officialMatches} />
                   </>
                 )}
               </motion.div>
