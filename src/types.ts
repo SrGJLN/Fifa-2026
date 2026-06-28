@@ -22,6 +22,9 @@ export interface Match {
   teamHomeScore?: number;
   teamAwayScore?: number;
   winnerId?: string;
+  // Resultado en penales (solo para partidos de bracket que terminen empatados)
+  penaltyHomeScore?: number;
+  penaltyAwayScore?: number;
   date: string;
   time: string;
   venue: string;
@@ -33,6 +36,9 @@ export interface MatchPick {
   teamHomeGoals?: number;
   teamAwayGoals?: number;
   winnerId?: string;
+  // Predicción de penales (solo aplica en bracket cuando el usuario predice empate)
+  penaltyHomeGoals?: number;
+  penaltyAwayGoals?: number;
 }
 
 export interface GroupStanding {

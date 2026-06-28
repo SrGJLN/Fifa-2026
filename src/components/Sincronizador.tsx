@@ -14,7 +14,7 @@ interface SincronizadorProps {
   officialMatches: Match[];
   officialThirds: string[];
   participants: Participant[];
-  onUpdateMatch: (matchId: number, home: number | undefined, away: number | undefined, completed: boolean, winnerId?: string) => Promise<void>;
+  onUpdateMatch: (matchId: number, home: number | undefined, away: number | undefined, completed: boolean, winnerId?: string, penaltyHome?: number, penaltyAway?: number) => Promise<void>;
   onUpdateThirds: (thirds: string[]) => Promise<void>;
   onResetAll: () => Promise<void>;
   onSeedData: () => void;
@@ -40,7 +40,7 @@ export default function Sincronizador({
   const [filterStage, setFilterStage] = useState<string>('all');
   const [filterGroup, setFilterGroup] = useState<string>('all');
   const [savingMatches, setSavingMatches] = useState<{ [id: number]: boolean }>({});
-  const [tempScores, setTempScores] = useState<{ [id: number]: { home: string; away: string; winnerId?: string } }>({});
+  const [tempScores, setTempScores] = useState<{ [id: number]: { home: string; away: string; winnerId?: string; penaltyHome?: string; penaltyAway?: string } }>({});
   const [advancingPhase, setAdvancingPhase] = useState<boolean>(false);
 
   const stages = [
@@ -83,20 +83,29 @@ export default function Sincronizador({
     }
   };
 
-  const handleScoreChange = (matchId: number, side: 'home' | 'away', val: string) => {
-    const current = tempScores[matchId] || {
-      home: String(officialMatches.find(m => m.id === matchId)?.teamHomeScore ?? ''),
-      away: String(officialMatches.find(m => m.id === matchId)?.teamAwayScore ?? ''),
-      winnerId: officialMatches.find(m => m.id === matchId)?.winnerId
+  const getInitialTemp = (matchId: number) => {
+    const m = officialMatches.find(x => x.id === matchId);
+    return {
+      home: m?.teamHomeScore !== undefined ? String(m.teamHomeScore) : '',
+      away: m?.teamAwayScore !== undefined ? String(m.teamAwayScore) : '',
+      winnerId: m?.winnerId,
+      penaltyHome: m?.penaltyHomeScore !== undefined ? String(m.penaltyHomeScore) : '',
+      penaltyAway: m?.penaltyAwayScore !== undefined ? String(m.penaltyAwayScore) : '',
     };
+  };
+
+  const handleScoreChange = (matchId: number, side: 'home' | 'away', val: string) => {
+    const current = tempScores[matchId] || getInitialTemp(matchId);
+    setTempScores({ ...tempScores, [matchId]: { ...current, [side]: val } });
+  };
+
+  const handlePenaltyChange = (matchId: number, side: 'penaltyHome' | 'penaltyAway', val: string) => {
+    const current = tempScores[matchId] || getInitialTemp(matchId);
     setTempScores({ ...tempScores, [matchId]: { ...current, [side]: val } });
   };
 
   const setBracketWinner = (matchId: number, winnerId: string) => {
-    const current = tempScores[matchId] || {
-      home: String(officialMatches.find(m => m.id === matchId)?.teamHomeScore ?? ''),
-      away: String(officialMatches.find(m => m.id === matchId)?.teamAwayScore ?? ''),
-    };
+    const current = tempScores[matchId] || getInitialTemp(matchId);
     setTempScores({ ...tempScores, [matchId]: { ...current, winnerId } });
   };
 
@@ -105,14 +114,17 @@ export default function Sincronizador({
     if (!match) return;
     setSavingMatches(prev => ({ ...prev, [matchId]: true }));
     try {
-      const temp = tempScores[matchId];
-      const homeVal = temp ? temp.home : String(match.teamHomeScore ?? '');
-      const awayVal = temp ? temp.away : String(match.teamAwayScore ?? '');
-      const winnerId = temp ? temp.winnerId : match.winnerId;
+      const temp = tempScores[matchId] || getInitialTemp(matchId);
+      const homeVal = temp.home;
+      const awayVal = temp.away;
+      const winnerId = temp.winnerId;
+      const penaltyHome = temp.penaltyHome !== '' && temp.penaltyHome !== undefined ? Number(temp.penaltyHome) : undefined;
+      const penaltyAway = temp.penaltyAway !== '' && temp.penaltyAway !== undefined ? Number(temp.penaltyAway) : undefined;
+
       if (homeVal.trim() === '' || awayVal.trim() === '') {
-        await onUpdateMatch(matchId, undefined, undefined, false, undefined);
+        await onUpdateMatch(matchId, undefined, undefined, false, undefined, undefined, undefined);
       } else {
-        await onUpdateMatch(matchId, Number(homeVal), Number(awayVal), true, winnerId);
+        await onUpdateMatch(matchId, Number(homeVal), Number(awayVal), true, winnerId, penaltyHome, penaltyAway);
       }
     } catch (e) {
       console.error(e);
@@ -175,31 +187,38 @@ export default function Sincronizador({
             </p>
             <ul className="space-y-3 text-sm">
               <li className="flex items-start gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">5</span>
+                <div>
+                  <p className="font-semibold text-slate-100">Empate Exacto + Penales</p>
+                  <p className="text-xs text-slate-400">Acierta el empate exacto y el ganador en penales.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">3</span>
                 <div>
                   <p className="font-semibold text-slate-100">Acierto Exacto</p>
-                  <p className="text-xs text-slate-400">Puntaje igual al resultado final.</p>
+                  <p className="text-xs text-slate-400">Marcador exacto, o empate exacto sin acertar penales.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">1</span>
                 <div>
-                  <p className="font-semibold text-slate-100">Acierto de Ganador o Empate</p>
-                  <p className="text-xs text-slate-400">Predijo el ganador pero erró el marcador exacto.</p>
+                  <p className="font-semibold text-slate-100">Acierto de Ganador</p>
+                  <p className="text-xs text-slate-400">Acierta el ganador final pero no el marcador exacto.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-rose-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">0</span>
                 <div>
                   <p className="font-semibold text-slate-100">Error</p>
-                  <p className="text-xs text-slate-400">Resultado totalmente incorrecto.</p>
+                  <p className="text-xs text-slate-400">No acierta nada.</p>
                 </div>
               </li>
             </ul>
           </div>
           <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-500 flex items-center gap-1.5 mt-4">
             <HelpCircle className="w-4 h-4 text-slate-400" />
-            <span>Los empates en brackets requieren marcar quién avanza.</span>
+            <span>En eliminatorias con empate, ingresa el resultado de penales.</span>
           </div>
         </div>
 
@@ -253,8 +272,8 @@ export default function Sincronizador({
               type="button"
               onClick={() => onTogglePredictionsClosed(!predictionsClosed)}
               className={`w-full py-2.5 px-4 rounded-xl text-xs font-black tracking-tight transition-all flex items-center justify-center gap-1.5 focus:outline-none ${predictionsClosed
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950'
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950'
                 }`}
             >
               {predictionsClosed ? <><RefreshCw className="w-3.5 h-3.5" /> Reabrir Quiniela</> : <><ShieldAlert className="w-3.5 h-3.5" /> Cerrar Quiniela (Bloquear)</>}
@@ -279,9 +298,8 @@ export default function Sincronizador({
               <h3 className="text-lg font-semibold tracking-wide">Avanzar Fase</h3>
             </div>
             <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-              Cuando hayas ingresado todos los resultados de <strong className="text-white">{phaseLabel[activePhase]}</strong>, avanza a la siguiente fase para que los participantes puedan completar sus predicciones.
+              Cuando hayas ingresado todos los resultados de <strong className="text-white">{phaseLabel[activePhase]}</strong>, avanza a la siguiente fase.
             </p>
-
             {nextPhase() ? (
               <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
                 <div className="flex justify-between">
@@ -307,7 +325,6 @@ export default function Sincronizador({
               </div>
             )}
           </div>
-
           <div className="pt-4 border-t border-slate-800/80 mt-4 flex flex-col gap-2">
             {nextPhase() && (
               <button
@@ -316,11 +333,7 @@ export default function Sincronizador({
                 onClick={handleAdvancePhase}
                 className="w-full py-2.5 px-4 rounded-xl text-xs font-black tracking-tight transition-all flex items-center justify-center gap-1.5 focus:outline-none bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
               >
-                {advancingPhase ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5" />
-                )}
+                {advancingPhase ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
                 Avanzar a {nextPhase() ? phaseLabel[nextPhase()!] : ''}
               </button>
             )}
@@ -345,7 +358,6 @@ export default function Sincronizador({
         <p className="text-slate-500 text-sm mb-6 max-w-3xl">
           De los 12 grupos, avanzan los 8 mejores terceros lugares. Selecciona los 8 oficiales para armar los cruces de Dieciseisavos de Final.
         </p>
-
         {calculatedThirds.length === 0 ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm flex items-center gap-3">
             <HelpCircle className="w-5 h-5 shrink-0" />
@@ -433,11 +445,7 @@ export default function Sincronizador({
             </div>
           ) : (
             filteredMatches.map((m) => {
-              const score = tempScores[m.id] || {
-                home: m.teamHomeScore !== undefined ? String(m.teamHomeScore) : '',
-                away: m.teamAwayScore !== undefined ? String(m.teamAwayScore) : '',
-                winnerId: m.winnerId
-              };
+              const score = tempScores[m.id] || getInitialTemp(m.id);
               const isSaving = savingMatches[m.id] || false;
               const isDrawBracket = m.stage !== 'group' && score.home !== '' && score.away !== '' && Number(score.home) === Number(score.away);
               const isPreR32Home = m.teamHomeId.startsWith('1') || m.teamHomeId.startsWith('2') || m.teamHomeId.startsWith('T') || m.teamHomeId.startsWith('G');
@@ -445,6 +453,8 @@ export default function Sincronizador({
 
               return (
                 <div key={m.id} className={`p-4 border rounded-2xl transition-all ${m.completed ? 'border-emerald-100 bg-emerald-50/10' : 'border-slate-100 bg-slate-50/20 hover:border-slate-200'}`}>
+
+                  {/* Header */}
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-3">
                     <span className="font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                       {m.stage === 'group' ? `Grupo ${m.groupLabel}` : stages.find(s => s.id === m.stage)?.name}
@@ -452,6 +462,7 @@ export default function Sincronizador({
                     <span>Partido #{m.id} • {m.date} - {m.time}</span>
                   </div>
 
+                  {/* Equipos y marcador */}
                   <div className="flex items-center justify-between gap-2.5">
                     <div className="flex-1 flex items-center justify-end gap-2.5 text-right">
                       <span className="font-bold text-sm text-slate-800 line-clamp-1">{isPreR32Home ? m.teamHomeId : getTeamName(m.teamHomeId)}</span>
@@ -470,28 +481,49 @@ export default function Sincronizador({
 
                   <div className="text-[11px] text-slate-400 mt-2.5 text-center">{m.venue} ({m.city})</div>
 
+                  {/* Panel de penales — aparece cuando hay empate en bracket */}
                   {isDrawBracket && (
-                    <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-xl p-2.5 text-center">
-                      <p className="text-xs font-bold text-indigo-950 mb-2">Empate en eliminatoria. ¿Quién clasifica (Penales)?</p>
-                      <div className="flex justify-center gap-2">
-                        <button type="button" onClick={() => setBracketWinner(m.id, m.teamHomeId)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${score.winnerId === m.teamHomeId ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}>
-                          {isPreR32Home ? <span className="text-sm">🌐</span> : <TeamFlag teamId={m.teamHomeId} className="w-5 h-3.5" />}
-                          <span>{isPreR32Home ? m.teamHomeId : getTeamName(m.teamHomeId)}</span>
-                        </button>
-                        <button type="button" onClick={() => setBracketWinner(m.id, m.teamAwayId)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${score.winnerId === m.teamAwayId ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}>
-                          {isPreR32Away ? <span className="text-sm">🌐</span> : <TeamFlag teamId={m.teamAwayId} className="w-5 h-3.5" />}
-                          <span>{isPreR32Away ? m.teamAwayId : getTeamName(m.teamAwayId)}</span>
-                        </button>
+                    <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-3">
+                      <p className="text-xs font-bold text-amber-900 text-center">⚽ Empate — Ingresa el resultado de penales</p>
+
+                      {/* Marcador de penales */}
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10px] text-amber-700 font-semibold">{isPreR32Home ? m.teamHomeId : getTeamName(m.teamHomeId)}</span>
+                          <input
+                            type="number"
+                            placeholder="--"
+                            min="0"
+                            value={score.penaltyHome ?? ''}
+                            onChange={(e) => handlePenaltyChange(m.id, 'penaltyHome', e.target.value)}
+                            className="w-12 h-10 text-center border border-amber-300 rounded-xl font-bold text-lg text-amber-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        </div>
+                        <span className="text-amber-600 font-extrabold text-lg mt-4">:</span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10px] text-amber-700 font-semibold">{isPreR32Away ? m.teamAwayId : getTeamName(m.teamAwayId)}</span>
+                          <input
+                            type="number"
+                            placeholder="--"
+                            min="0"
+                            value={score.penaltyAway ?? ''}
+                            onChange={(e) => handlePenaltyChange(m.id, 'penaltyAway', e.target.value)}
+                            className="w-12 h-10 text-center border border-amber-300 rounded-xl font-bold text-lg text-amber-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        </div>
                       </div>
+                      <p className="text-[10px] text-amber-600 text-center">El equipo con más penales classifica automáticamente.</p>
                     </div>
                   )}
 
+                  {/* Botón guardar */}
                   <div className="mt-3 flex justify-end">
                     <button type="button" disabled={isSaving} onClick={() => handleSaveMatch(m.id)} className={`py-1.5 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${m.completed ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
                       {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : m.completed ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
                       {m.completed ? 'Marcado Oficial' : 'Guardar Resultado'}
                     </button>
                   </div>
+
                 </div>
               );
             })

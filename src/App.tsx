@@ -44,7 +44,6 @@ export default function App() {
   const [isSavedLocally, setIsSavedLocally] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Participante activo para llenar predicciones de fases siguientes
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
   const [activeBracketPicks, setActiveBracketPicks] = useState<{ [matchId: number]: MatchPick }>({});
   const [activeSelectedThirds, setActiveSelectedThirds] = useState<string[]>([]);
@@ -52,7 +51,6 @@ export default function App() {
 
   const [compareParticipant, setCompareParticipant] = useState<Participant | null>(null);
 
-  // Admin PIN state
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
@@ -121,8 +119,8 @@ export default function App() {
     persistDraftToStorage(userName, nextGroup, userBracketPicks, userSelectedThirds);
   };
 
-  const handleBracketPickChange = (matchId: number, homeGoals: number | undefined, awayGoals: number | undefined, winnerId?: string) => {
-    const nextBracket = { ...userBracketPicks, [matchId]: { teamHomeGoals: homeGoals, teamAwayGoals: awayGoals, winnerId } };
+  const handleBracketPickChange = (matchId: number, homeGoals: number | undefined, awayGoals: number | undefined, winnerId?: string, penaltyHomeGoals?: number, penaltyAwayGoals?: number) => {
+    const nextBracket = { ...userBracketPicks, [matchId]: { teamHomeGoals: homeGoals, teamAwayGoals: awayGoals, winnerId, penaltyHomeGoals, penaltyAwayGoals } };
     setUserBracketPicks(nextBracket);
     persistDraftToStorage(userName, userGroupPicks, nextBracket, userSelectedThirds);
   };
@@ -132,16 +130,14 @@ export default function App() {
     persistDraftToStorage(userName, userGroupPicks, userBracketPicks, thirds);
   };
 
-  // Cambios en bracket del participante activo (fases siguientes)
-  const handleActiveBracketPickChange = (matchId: number, homeGoals: number | undefined, awayGoals: number | undefined, winnerId?: string) => {
-    setActiveBracketPicks(prev => ({ ...prev, [matchId]: { teamHomeGoals: homeGoals, teamAwayGoals: awayGoals, winnerId } }));
+  const handleActiveBracketPickChange = (matchId: number, homeGoals: number | undefined, awayGoals: number | undefined, winnerId?: string, penaltyHomeGoals?: number, penaltyAwayGoals?: number) => {
+    setActiveBracketPicks(prev => ({ ...prev, [matchId]: { teamHomeGoals: homeGoals, teamAwayGoals: awayGoals, winnerId, penaltyHomeGoals, penaltyAwayGoals } }));
   };
 
   const handleActiveSelectedThirdsChange = (thirds: string[]) => {
     setActiveSelectedThirds(thirds);
   };
 
-  // Guardar predicciones de bracket del participante activo
   const handleSaveBracketPredictions = async () => {
     if (!activeParticipant) return;
     setIsSavingBracket(true);
@@ -221,18 +217,29 @@ export default function App() {
     }
   };
 
+  // Actualizado para incluir penales
   const handleUpdateOfficialMatch = async (
     matchId: number,
     teamHomeScore: number | undefined,
     teamAwayScore: number | undefined,
     completed: boolean,
-    winnerId?: string
+    winnerId?: string,
+    penaltyHome?: number,
+    penaltyAway?: number
   ) => {
     try {
       const res = await fetch('/api/official/update-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId, teamHomeScore, teamAwayScore, completed, winnerId }),
+        body: JSON.stringify({
+          matchId,
+          teamHomeScore,
+          teamAwayScore,
+          completed,
+          winnerId,
+          penaltyHomeScore: penaltyHome,
+          penaltyAwayScore: penaltyAway
+        }),
       });
       if (!res.ok) throw new Error('No se pudo guardar la posición oficial.');
       const data = await res.json();
@@ -385,7 +392,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800" id="main-application-stage">
 
-      <header className="bg-slate-900 border-b border-slate-800 text-white py-4 px-6 shadow-md sticky top-0 z-40" id="header-section">
+      <header className="bg-slate-900 border-b border-slate-800 text-white py-4 px-6 shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="p-2.5 bg-emerald-500 text-slate-950 rounded-2xl flex items-center justify-center font-extrabold shadow-md transform rotate-3">
@@ -399,7 +406,7 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="flex bg-slate-800 rounded-2xl p-1 shadow-inner" id="main-tabs-navigation">
+          <nav className="flex bg-slate-800 rounded-2xl p-1 shadow-inner">
             <button
               onClick={() => { setActiveTab('quiniela'); setCompareParticipant(null); setAdminUnlocked(false); setActiveParticipant(null); }}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${activeTab === 'quiniela' && !compareParticipant ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-300 hover:text-white hover:bg-slate-700/60'}`}
@@ -437,10 +444,9 @@ export default function App() {
           <span className="font-semibold text-sm">Cargando base de datos y fixture...</span>
         </div>
       ) : (
-        <main className="max-w-7xl mx-auto px-6 py-6" id="main-content-layout">
+        <main className="max-w-7xl mx-auto px-6 py-6">
           <AnimatePresence mode="wait">
 
-            {/* MODO INSPECCIÓN */}
             {compareParticipant && (
               <motion.div key="compare-mode-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 <div className="p-4 bg-slate-900 text-white rounded-3xl border border-slate-800 flex items-center justify-between gap-4">
@@ -475,7 +481,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* MODO LLENAR PREDICCIONES DE FASE SIGUIENTE */}
             {activeParticipant && !compareParticipant && (
               <motion.div key="active-participant-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 <div className="p-4 bg-indigo-900 text-white rounded-3xl border border-indigo-800 flex items-center justify-between gap-4">
@@ -490,24 +495,15 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleSaveBracketPredictions}
-                      disabled={isSavingBracket}
-                      className="py-2 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5"
-                    >
+                    <button type="button" onClick={handleSaveBracketPredictions} disabled={isSavingBracket} className="py-2 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5">
                       {isSavingBracket ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                       Guardar Predicciones
                     </button>
-                    <button
-                      onClick={() => { setActiveParticipant(null); setActiveBracketPicks({}); setActiveSelectedThirds([]); }}
-                      className="py-1.5 px-3 bg-indigo-700 hover:bg-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center gap-1"
-                    >
+                    <button onClick={() => { setActiveParticipant(null); setActiveBracketPicks({}); setActiveSelectedThirds([]); }} className="py-1.5 px-3 bg-indigo-700 hover:bg-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center gap-1">
                       <X className="w-3.5 h-3.5 shrink-0" /> Cancelar
                     </button>
                   </div>
                 </div>
-
                 <BracketStage
                   bracketMatches={bracketMatches}
                   groupMatches={groupMatches}
@@ -522,14 +518,12 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* VISTA: MI QUINIELA */}
             {activeTab === 'quiniela' && !compareParticipant && !activeParticipant && (
               <motion.div key="quiniela-tab-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 {predictionsClosed ? (
                   <OfficialStandings groupMatches={groupMatches} />
                 ) : (
                   <>
-                    {/* Banner de fase activa si no es grupos */}
                     {activePhase !== 'group' && (
                       <div className="bg-indigo-900 border border-indigo-800 text-white p-4 rounded-2xl flex items-center gap-3">
                         <ChevronRight className="w-5 h-5 text-indigo-400 shrink-0" />
@@ -545,7 +539,6 @@ export default function App() {
                         <button type="button" onClick={() => setQuinielaSubView('group')} className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'group' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>FASE DE GRUPOS</button>
                         <button type="button" onClick={() => setQuinielaSubView('bracket')} className={`flex-1 py-2.5 px-4 text-center text-xs font-extrabold rounded-xl transition-all focus:outline-none ${quinielaSubView === 'bracket' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>FASES FINALES</button>
                       </div>
-
                       <div className="flex items-center gap-3 bg-white border border-slate-150 p-4 rounded-2xl shadow-sm text-xs max-w-sm">
                         <div className="relative w-12 h-12 flex items-center justify-center bg-emerald-50 rounded-full text-emerald-600 font-extrabold">
                           <span>{Math.round((filledGroupPicksCount / 72) * 100)}%</span>
@@ -611,7 +604,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* VISTA: TABLA GENERAL */}
             {activeTab === 'leaderboard' && !compareParticipant && !activeParticipant && (
               <motion.div key="leaderboard-tab-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 <Leaderboard
@@ -628,7 +620,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* VISTA: SINCRONIZADOR API */}
             {activeTab === 'sincronizador' && !compareParticipant && !activeParticipant && (
               <motion.div key="sincronizador-tab-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 {!adminUnlocked ? (

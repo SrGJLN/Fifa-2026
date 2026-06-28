@@ -161,10 +161,8 @@ async function saveAllParticipantsAtomic(participants: Participant[]) {
 
 // ---- RUTAS DE LA API REST ----
 
-// Estado inicial del juego
 app.get('/api/state', async (req, res) => {
   const store = await loadDb();
-  console.log('Participantes cargados:', store.participants.length);
   res.json({
     participants: store.participants,
     officialMatches: store.officialMatches,
@@ -174,7 +172,6 @@ app.get('/api/state', async (req, res) => {
   });
 });
 
-// Cerrar o abrir registros
 app.post('/api/predictions/close', async (req, res) => {
   const { closed } = req.body;
   const store = await loadDb();
@@ -183,7 +180,6 @@ app.post('/api/predictions/close', async (req, res) => {
   res.json({ success: true, predictionsClosed: store.predictionsClosed });
 });
 
-// Registro inicial de predicción (fase de grupos)
 app.post('/api/predictions', async (req, res) => {
   const { name, groupPicks, bracketPicks, selectedThirds } = req.body;
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -243,7 +239,6 @@ app.post('/api/predictions', async (req, res) => {
   });
 });
 
-// Actualizar predicciones de bracket de un participante existente
 app.post('/api/predictions/:id/bracket', async (req, res) => {
   const { id } = req.params;
   const { bracketPicks, selectedThirds, phase } = req.body;
@@ -268,13 +263,11 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
 
   const p = store.participants[participantIdx];
 
-  // Verificar que no haya completado ya esta fase
   if (p.completedPhases?.includes(phase)) {
     res.status(400).json({ error: 'Ya completaste las predicciones de esta fase.' });
     return;
   }
 
-  // Actualizar predicciones de bracket mezclando con las existentes
   const updatedBracketPicks = {
     ...p.bracketPicks,
     ...(bracketPicks || {})
@@ -282,7 +275,6 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
 
   const updatedSelectedThirds = selectedThirds || p.selectedThirds;
 
-  // Recalcular puntos
   const groupPts = calculatePoints(p.groupPicks, store.officialMatches);
   const bracketPts = calculatePoints(updatedBracketPicks, store.officialMatches);
 
@@ -297,7 +289,6 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
   };
 
   store.participants[participantIdx] = updatedParticipant;
-
   await saveParticipant(updatedParticipant);
 
   res.json({
@@ -309,7 +300,6 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
   });
 });
 
-// Avanzar a la siguiente fase
 app.post('/api/advance-phase', async (req, res) => {
   const { phase } = req.body;
 
@@ -321,7 +311,7 @@ app.post('/api/advance-phase', async (req, res) => {
 
   const store = await loadDb();
   store.activePhase = phase;
-  store.predictionsClosed = false; // Reabre automáticamente para la nueva fase
+  store.predictionsClosed = false;
 
   await saveDb(store);
 
@@ -333,9 +323,9 @@ app.post('/api/advance-phase', async (req, res) => {
   });
 });
 
-// Actualizar resultados de partidos oficiales (Admin)
+// Actualizar resultados de partidos oficiales (Admin) — ahora con penales
 app.post('/api/official/update-match', async (req, res) => {
-  const { matchId, teamHomeScore, teamAwayScore, completed, winnerId } = req.body;
+  const { matchId, teamHomeScore, teamAwayScore, completed, winnerId, penaltyHomeScore, penaltyAwayScore } = req.body;
   if (matchId === undefined) return res.status(400).json({ error: 'matchId es obligatorio' });
 
   const store = await loadDb();
@@ -343,16 +333,37 @@ app.post('/api/official/update-match', async (req, res) => {
   if (matchIdx === -1) return res.status(404).json({ error: 'Partido no encontrado' });
 
   const match = store.officialMatches[matchIdx];
+
   if (completed) {
     match.teamHomeScore = teamHomeScore !== undefined ? Number(teamHomeScore) : undefined;
     match.teamAwayScore = teamAwayScore !== undefined ? Number(teamAwayScore) : undefined;
     match.completed = true;
     match.winnerId = winnerId || undefined;
+
+    // Guardar penales si el partido terminó empatado
+    const isDrawn = match.teamHomeScore !== undefined && match.teamAwayScore !== undefined
+      && match.teamHomeScore === match.teamAwayScore;
+
+    if (isDrawn && penaltyHomeScore !== undefined && penaltyAwayScore !== undefined) {
+      match.penaltyHomeScore = Number(penaltyHomeScore);
+      match.penaltyAwayScore = Number(penaltyAwayScore);
+      // Determinar ganador por penales automáticamente
+      if (!match.winnerId) {
+        match.winnerId = Number(penaltyHomeScore) > Number(penaltyAwayScore)
+          ? match.teamHomeId
+          : match.teamAwayId;
+      }
+    } else {
+      match.penaltyHomeScore = undefined;
+      match.penaltyAwayScore = undefined;
+    }
   } else {
     match.teamHomeScore = undefined;
     match.teamAwayScore = undefined;
     match.completed = false;
     match.winnerId = undefined;
+    match.penaltyHomeScore = undefined;
+    match.penaltyAwayScore = undefined;
   }
 
   recalculateAllParticipants(store);
@@ -368,7 +379,6 @@ app.post('/api/official/update-match', async (req, res) => {
   });
 });
 
-// Actualizar terceros oficiales
 app.post('/api/official/update-thirds', async (req, res) => {
   const { officialThirds } = req.body;
   const store = await loadDb();
@@ -384,7 +394,6 @@ app.post('/api/official/update-thirds', async (req, res) => {
   });
 });
 
-// Reiniciar base de datos
 app.post('/api/reset', async (req, res) => {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return res.status(500).json({ error: 'Faltan credenciales' });
 
