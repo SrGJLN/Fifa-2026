@@ -20,6 +20,7 @@ interface BracketStageProps {
   onChangeSelectedThirds: (thirds: string[]) => void;
   readOnly?: boolean;
   participantName?: string;
+  hideThirdsSelector?: boolean;
 }
 
 // Calcula puntos para partidos de bracket
@@ -69,6 +70,7 @@ export default function BracketStage({
   onChangeSelectedThirds,
   readOnly = false,
   participantName,
+  hideThirdsSelector = false,
 }: BracketStageProps) {
   const [activeStageTab, setActiveStageTab] = useState<string>('r32');
 
@@ -204,7 +206,7 @@ export default function BracketStage({
     <div className="space-y-8" id="bracket-predictions">
 
       {/* SELECCIÓN DE MEJORES TERCEROS */}
-      {activeStageTab === 'r32' && (
+      {activeStageTab === 'r32' && !hideThirdsSelector && (
         <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-5 h-5 text-indigo-500" />

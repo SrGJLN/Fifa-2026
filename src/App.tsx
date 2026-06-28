@@ -476,7 +476,7 @@ export default function App() {
                 {quinielaSubView === 'group' ? (
                   <GroupStage groupMatches={groupMatches} picks={compareParticipant.groupPicks} onChangePick={() => { }} readOnly={true} participantName={compareParticipant.name} />
                 ) : (
-                  <BracketStage bracketMatches={bracketMatches} groupMatches={groupMatches} groupPicks={compareParticipant.groupPicks} bracketPicks={compareParticipant.bracketPicks} selectedThirds={compareParticipant.selectedThirds} onChangeBracketPick={() => { }} onChangeSelectedThirds={() => { }} readOnly={true} participantName={compareParticipant.name} />
+                  <BracketStage bracketMatches={bracketMatches} groupMatches={groupMatches} groupPicks={compareParticipant.groupPicks} bracketPicks={compareParticipant.bracketPicks} selectedThirds={compareParticipant.selectedThirds} onChangeBracketPick={() => { }} onChangeSelectedThirds={() => { }} readOnly={true} participantName={compareParticipant.name} hideThirdsSelector={true} />
                 )}
               </motion.div>
             )}
@@ -514,6 +514,7 @@ export default function App() {
                   onChangeSelectedThirds={handleActiveSelectedThirdsChange}
                   readOnly={false}
                   participantName={activeParticipant.name}
+                  hideThirdsSelector={true}
                 />
               </motion.div>
             )}
