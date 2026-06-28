@@ -39,12 +39,12 @@ export const calculatePoints = (
     const pick = userPicks[om.id];
     if (!pick) return;
 
-    const userHome = pick.teamHomeGoals;
-    const userAway = pick.teamAwayGoals;
-    const offHome = om.teamHomeScore;
-    const offAway = om.teamAwayScore;
+    const userHome = pick.teamHomeGoals !== undefined && pick.teamHomeGoals !== null ? Number(pick.teamHomeGoals) : undefined;
+    const userAway = pick.teamAwayGoals !== undefined && pick.teamAwayGoals !== null ? Number(pick.teamAwayGoals) : undefined;
+    const offHome = om.teamHomeScore !== undefined && om.teamHomeScore !== null ? Number(om.teamHomeScore) : undefined;
+    const offAway = om.teamAwayScore !== undefined && om.teamAwayScore !== null ? Number(om.teamAwayScore) : undefined;
 
-    if (userHome === undefined || userAway === undefined || offHome === undefined || offAway === undefined) return;
+    if (userHome === undefined || userAway === undefined || offHome === undefined || offAway === undefined || isNaN(userHome) || isNaN(userAway) || isNaN(offHome) || isNaN(offAway)) return;
 
     const isGroupStage = om.stage === 'group';
 

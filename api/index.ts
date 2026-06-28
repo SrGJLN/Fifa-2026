@@ -95,14 +95,12 @@ async function loadDb(): Promise<DbStore> {
 async function saveDb(store: DbStore) {
   try {
     if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return;
-
     const config = {
       officialMatches: store.officialMatches,
       officialThirds: store.officialThirds,
       predictionsClosed: store.predictionsClosed,
       activePhase: store.activePhase
     };
-
     await fetch(`${UPSTASH_REST_URL}/set/quiniela_config`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_REST_TOKEN}`, 'Content-Type': 'application/json' },
@@ -113,17 +111,23 @@ async function saveDb(store: DbStore) {
   }
 }
 
+// Calcula puntos correctamente separando grupos de bracket
+function calcAllPoints(p: Participant, officialMatches: Match[]) {
+  const groupMatches = officialMatches.filter(m => m.stage === 'group');
+  const bracketMatches = officialMatches.filter(m => m.stage !== 'group');
+  const groupPts = calculatePoints(p.groupPicks, groupMatches);
+  const bracketPts = calculatePoints(p.bracketPicks, bracketMatches);
+  return {
+    totalPoints: groupPts.totalPoints + bracketPts.totalPoints,
+    exactCount: groupPts.exactCount + bracketPts.exactCount,
+    outcomeCount: groupPts.outcomeCount + bracketPts.outcomeCount
+  };
+}
+
 function recalculateAllParticipants(store: DbStore) {
   store.participants = store.participants.map(p => {
-    const groupBreakdown = calculatePoints(p.groupPicks, store.officialMatches);
-    const bracketBreakdown = calculatePoints(p.bracketPicks, store.officialMatches);
-
-    return {
-      ...p,
-      totalPoints: groupBreakdown.totalPoints + bracketBreakdown.totalPoints,
-      exactCount: groupBreakdown.exactCount + bracketBreakdown.exactCount,
-      outcomeCount: groupBreakdown.outcomeCount + bracketBreakdown.outcomeCount
-    };
+    const pts = calcAllPoints(p, store.officialMatches);
+    return { ...p, ...pts };
   });
 }
 
@@ -196,8 +200,11 @@ app.post('/api/predictions', async (req, res) => {
   const formattedName = name.trim();
   const id = 'user_' + Math.random().toString(36).substring(2, 11);
 
-  const groupPts = calculatePoints(groupPicks || {}, store.officialMatches);
-  const bracketPts = calculatePoints(bracketPicks || {}, store.officialMatches);
+  // Separar grupos de bracket para calcular correctamente
+  const groupMatches = store.officialMatches.filter(m => m.stage === 'group');
+  const bracketMatches = store.officialMatches.filter(m => m.stage !== 'group');
+  const groupPts = calculatePoints(groupPicks || {}, groupMatches);
+  const bracketPts = calculatePoints(bracketPicks || {}, bracketMatches);
 
   const participant: Participant = {
     id,
@@ -275,16 +282,17 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
 
   const updatedSelectedThirds = selectedThirds || p.selectedThirds;
 
-  const groupPts = calculatePoints(p.groupPicks, store.officialMatches);
-  const bracketPts = calculatePoints(updatedBracketPicks, store.officialMatches);
+  // Calcular puntos correctamente separando grupos de bracket
+  const updatedP = { ...p, bracketPicks: updatedBracketPicks };
+  const pts = calcAllPoints(updatedP, store.officialMatches);
 
   const updatedParticipant: Participant = {
     ...p,
     bracketPicks: updatedBracketPicks,
     selectedThirds: updatedSelectedThirds,
-    totalPoints: groupPts.totalPoints + bracketPts.totalPoints,
-    exactCount: groupPts.exactCount + bracketPts.exactCount,
-    outcomeCount: groupPts.outcomeCount + bracketPts.outcomeCount,
+    totalPoints: pts.totalPoints,
+    exactCount: pts.exactCount,
+    outcomeCount: pts.outcomeCount,
     completedPhases: [...(p.completedPhases || ['group']), phase]
   };
 
@@ -312,7 +320,6 @@ app.post('/api/advance-phase', async (req, res) => {
   const store = await loadDb();
   store.activePhase = phase;
   store.predictionsClosed = false;
-
   await saveDb(store);
 
   res.json({
@@ -323,7 +330,6 @@ app.post('/api/advance-phase', async (req, res) => {
   });
 });
 
-// Actualizar resultados de partidos oficiales (Admin) — ahora con penales
 app.post('/api/official/update-match', async (req, res) => {
   const { matchId, teamHomeScore, teamAwayScore, completed, winnerId, penaltyHomeScore, penaltyAwayScore } = req.body;
   if (matchId === undefined) return res.status(400).json({ error: 'matchId es obligatorio' });
@@ -340,14 +346,12 @@ app.post('/api/official/update-match', async (req, res) => {
     match.completed = true;
     match.winnerId = winnerId || undefined;
 
-    // Guardar penales si el partido terminó empatado
     const isDrawn = match.teamHomeScore !== undefined && match.teamAwayScore !== undefined
       && match.teamHomeScore === match.teamAwayScore;
 
     if (isDrawn && penaltyHomeScore !== undefined && penaltyAwayScore !== undefined) {
       match.penaltyHomeScore = Number(penaltyHomeScore);
       match.penaltyAwayScore = Number(penaltyAwayScore);
-      // Determinar ganador por penales automáticamente
       if (!match.winnerId) {
         match.winnerId = Number(penaltyHomeScore) > Number(penaltyAwayScore)
           ? match.teamHomeId
@@ -394,6 +398,17 @@ app.post('/api/official/update-thirds', async (req, res) => {
   });
 });
 
+// Endpoint para recalcular y recuperar puntos perdidos
+app.post('/api/recalculate', async (req, res) => {
+  const store = await loadDb();
+  recalculateAllParticipants(store);
+  await saveAllParticipantsAtomic(store.participants);
+  res.json({
+    success: true,
+    participants: store.participants
+  });
+});
+
 app.post('/api/reset', async (req, res) => {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return res.status(500).json({ error: 'Faltan credenciales' });
 
@@ -418,7 +433,6 @@ app.post('/api/reset', async (req, res) => {
   });
 });
 
-// ---- CONFIGURACIÓN DEL SERVIDOR VITE / PRODUCCIÓN ----
 async function startServer() {
   if (!isVercel && process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
