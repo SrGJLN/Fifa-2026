@@ -89,8 +89,9 @@ export default function BracketStage({
   const calculatedThirds = getThirdPlaceTeams(groupMatches, groupPicks);
 
   const resolveTeam = (placeholder: string): Team | null => {
-    if (placeholder.length === 3 && placeholder === placeholder.toUpperCase() && !placeholder.startsWith('G') && !placeholder.startsWith('P')) {
-      return TEAMS.find((team) => team.id === placeholder) || null;
+    const foundTeam = TEAMS.find((team) => team.id === placeholder);
+    if (foundTeam) {
+      return foundTeam;
     }
     if (placeholder.match(/^[12][A-L]$/)) {
       const idx = parseInt(placeholder.charAt(0), 10) - 1;
@@ -103,10 +104,10 @@ export default function BracketStage({
       const teamId = selectedThirds[orderIdx];
       return teamId ? (TEAMS.find((team) => team.id === teamId) || null) : null;
     }
-    if (placeholder.startsWith('G')) {
+    if (placeholder.match(/^G\d+$/)) {
       return resolveMatchWinner(parseInt(placeholder.substring(1), 10));
     }
-    if (placeholder.startsWith('P')) {
+    if (placeholder.match(/^P\d+$/)) {
       return resolveMatchLoser(parseInt(placeholder.substring(1), 10));
     }
     return null;

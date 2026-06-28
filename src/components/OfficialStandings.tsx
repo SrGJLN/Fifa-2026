@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Match, MatchPick, ActivePhase } from '../types';
-import { GROUPS, getTeamName } from '../data/worldCupData';
+import { GROUPS, getTeamName, TEAMS } from '../data/worldCupData';
 import { calculateGroupStandings } from '../utils/football';
 import TeamFlag from './TeamFlag';
 import { Trophy, HelpCircle, Lock, TrendingUp, ChevronRight } from 'lucide-react';
@@ -198,7 +198,7 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
                       <td className="py-4 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <span className="font-bold text-sm text-slate-800">{homeName}</span>
-                          {m.teamHomeId.length === 3 && !m.teamHomeId.startsWith('G') && !m.teamHomeId.startsWith('P') ? (
+                          {TEAMS.some(t => t.id === m.teamHomeId) ? (
                             <TeamFlag teamId={m.teamHomeId} className="w-7 h-4.5 shrink-0" />
                           ) : (
                             <span className="text-slate-400 text-xs font-mono">{m.teamHomeId}</span>
@@ -231,7 +231,7 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
                       {/* Visitante */}
                       <td className="py-4 px-4 text-left">
                         <div className="flex items-center gap-2">
-                          {m.teamAwayId.length === 3 && !m.teamAwayId.startsWith('G') && !m.teamAwayId.startsWith('P') ? (
+                          {TEAMS.some(t => t.id === m.teamAwayId) ? (
                             <TeamFlag teamId={m.teamAwayId} className="w-7 h-4.5 shrink-0" />
                           ) : (
                             <span className="text-slate-400 text-xs font-mono">{m.teamAwayId}</span>

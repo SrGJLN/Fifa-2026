@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Match, Participant, ActivePhase } from '../types';
-import { getTeamName } from '../data/worldCupData';
+import { getTeamName, TEAMS } from '../data/worldCupData';
 import TeamFlag from './TeamFlag';
 import { getThirdPlaceTeams } from '../utils/football';
 import { RefreshCw, Play, Trophy, Users, ShieldAlert, Check, HelpCircle, Save, ChevronRight } from 'lucide-react';
@@ -448,8 +448,8 @@ export default function Sincronizador({
               const score = tempScores[m.id] || getInitialTemp(m.id);
               const isSaving = savingMatches[m.id] || false;
               const isDrawBracket = m.stage !== 'group' && score.home !== '' && score.away !== '' && Number(score.home) === Number(score.away);
-              const isPreR32Home = m.teamHomeId.startsWith('1') || m.teamHomeId.startsWith('2') || m.teamHomeId.startsWith('T') || m.teamHomeId.startsWith('G');
-              const isPreR32Away = m.teamAwayId.startsWith('1') || m.teamAwayId.startsWith('2') || m.teamAwayId.startsWith('T') || m.teamAwayId.startsWith('G');
+              const isPreR32Home = !TEAMS.some(t => t.id === m.teamHomeId);
+              const isPreR32Away = !TEAMS.some(t => t.id === m.teamAwayId);
 
               return (
                 <div key={m.id} className={`p-4 border rounded-2xl transition-all ${m.completed ? 'border-emerald-100 bg-emerald-50/10' : 'border-slate-100 bg-slate-50/20 hover:border-slate-200'}`}>
