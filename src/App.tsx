@@ -521,7 +521,11 @@ export default function App() {
             {activeTab === 'quiniela' && !compareParticipant && !activeParticipant && (
               <motion.div key="quiniela-tab-wrapper" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} className="space-y-6">
                 {predictionsClosed ? (
-                  <OfficialStandings groupMatches={groupMatches} />
+                  <OfficialStandings
+                    groupMatches={groupMatches}
+                    allMatches={officialMatches}
+                    activePhase={activePhase}
+                  />
                 ) : (
                   <>
                     {activePhase !== 'group' && (
