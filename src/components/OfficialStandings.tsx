@@ -8,7 +8,7 @@ import { Match, MatchPick, ActivePhase } from '../types';
 import { GROUPS, getTeamName, TEAMS } from '../data/worldCupData';
 import { calculateGroupStandings } from '../utils/football';
 import TeamFlag from './TeamFlag';
-import { Trophy, HelpCircle, Lock, TrendingUp, ChevronRight } from 'lucide-react';
+import { Trophy, HelpCircle, Lock, TrendingUp } from 'lucide-react';
 
 interface OfficialStandingsProps {
   groupMatches: Match[];
@@ -43,7 +43,6 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
     return acc;
   }, {} as { [id: number]: MatchPick });
 
-  // Partidos de la fase activa
   const phaseMatches = allMatches.filter(m => {
     if (activePhase === 'final') return m.stage === 'final' || m.stage === 'third';
     return m.stage === phaseStage[activePhase];
@@ -56,6 +55,8 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
   const totalCount = activePhase === 'group'
     ? groupMatches.length
     : phaseMatches.length;
+
+  const isKnownTeam = (id: string) => TEAMS.some(t => t.id === id);
 
   return (
     <div className="space-y-6" id="official-standings-section">
@@ -85,7 +86,7 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
         </div>
       </div>
 
-      {/* FASE DE GRUPOS — tablas de posición */}
+      {/* FASE DE GRUPOS */}
       {activePhase === 'group' && (
         <div>
           <h3 className="text-base font-black text-slate-900 mb-4 uppercase tracking-wide flex items-center gap-2">
@@ -159,7 +160,7 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
         </div>
       )}
 
-      {/* FASES ELIMINATORIAS — tabla de partidos */}
+      {/* FASES ELIMINATORIAS — tarjetas verticales */}
       {activePhase !== 'group' && (
         <div>
           <h3 className="text-base font-black text-slate-900 mb-4 uppercase tracking-wide flex items-center gap-2">
@@ -167,88 +168,105 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
             {phaseLabel[activePhase]} — Resultados Oficiales
           </h3>
 
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4 text-center w-10">#</th>
-                  <th className="py-3 px-4 text-right">Local</th>
-                  <th className="py-3 px-4 text-center w-24">Resultado</th>
-                  <th className="py-3 px-4 text-left">Visitante</th>
-                  <th className="py-3 px-4 text-center hidden sm:table-cell">Fecha</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {phaseMatches.map((m, idx) => {
-                  const homeName = getTeamName(m.teamHomeId);
-                  const awayName = getTeamName(m.teamAwayId);
-                  const hasResult = m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined;
-                  const hasPenalties = hasResult && m.penaltyHomeScore !== undefined && m.penaltyAwayScore !== undefined;
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {phaseMatches.map((m, idx) => {
+              const homeName = getTeamName(m.teamHomeId);
+              const awayName = getTeamName(m.teamAwayId);
+              const hasResult = m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined;
+              const hasPenalties = hasResult && m.penaltyHomeScore !== undefined && m.penaltyAwayScore !== undefined;
+              const homeWon = hasResult && m.teamHomeScore! > m.teamAwayScore!;
+              const awayWon = hasResult && m.teamAwayScore! > m.teamHomeScore!;
+              const homePenWon = hasPenalties && m.penaltyHomeScore! > m.penaltyAwayScore!;
+              const awayPenWon = hasPenalties && m.penaltyAwayScore! > m.penaltyHomeScore!;
 
-                  return (
-                    <tr key={m.id} className={`hover:bg-slate-50/50 transition-colors ${m.completed ? 'bg-emerald-50/10' : ''}`}>
-                      {/* # */}
-                      <td className="py-4 px-4 text-center">
-                        <span className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 font-extrabold text-xs flex items-center justify-center mx-auto">
-                          {idx + 1}
-                        </span>
-                      </td>
+              return (
+                <div
+                  key={m.id}
+                  className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all ${m.completed ? 'border-emerald-100' : 'border-slate-100'
+                    }`}
+                >
+                  {/* Header */}
+                  <div className={`px-4 py-2 flex items-center justify-between text-xs ${m.completed ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-slate-50 border-b border-slate-100'
+                    }`}>
+                    <span className="font-extrabold text-indigo-600">#{idx + 1}</span>
+                    <span className="text-slate-400 font-medium">{m.date} · {m.time}</span>
+                  </div>
 
-                      {/* Local */}
-                      <td className="py-4 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="font-bold text-sm text-slate-800">{homeName}</span>
-                          {TEAMS.some(t => t.id === m.teamHomeId) ? (
-                            <TeamFlag teamId={m.teamHomeId} className="w-7 h-4.5 shrink-0" />
-                          ) : (
-                            <span className="text-slate-400 text-xs font-mono">{m.teamHomeId}</span>
+                  {/* Equipo Local */}
+                  <div className={`flex items-center justify-between px-4 py-3 border-b border-slate-50 ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon)) ? 'bg-emerald-50/30' : ''
+                    }`}>
+                    <div className="flex items-center gap-2.5">
+                      {isKnownTeam(m.teamHomeId) ? (
+                        <TeamFlag teamId={m.teamHomeId} className="w-7 h-5 shrink-0" />
+                      ) : (
+                        <span className="text-slate-300 text-lg">🌐</span>
+                      )}
+                      <span className={`font-bold text-sm ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon))
+                          ? 'text-emerald-700' : 'text-slate-800'
+                        }`}>
+                        {homeName}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      {hasResult ? (
+                        <div className="flex flex-col items-end">
+                          <span className={`font-extrabold text-xl font-mono ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon))
+                              ? 'text-emerald-600' : 'text-slate-400'
+                            }`}>
+                            {m.teamHomeScore}
+                          </span>
+                          {hasPenalties && (
+                            <span className="text-[10px] text-amber-600 font-bold">({m.penaltyHomeScore})</span>
                           )}
                         </div>
-                      </td>
+                      ) : (
+                        <span className="text-slate-200 font-extrabold text-xl">-</span>
+                      )}
+                    </div>
+                  </div>
 
-                      {/* Resultado */}
-                      <td className="py-4 px-4 text-center">
-                        {hasResult ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className="px-3 py-1 bg-slate-950 text-white rounded-full font-extrabold text-sm font-mono">
-                              {m.teamHomeScore} - {m.teamAwayScore}
-                            </span>
-                            {hasPenalties && (
-                              <span className="text-[10px] text-amber-600 font-bold">
-                                Pen: {m.penaltyHomeScore} - {m.penaltyAwayScore}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1">
-                            <ChevronRight className="w-3 h-3 text-slate-300" />
-                            <span className="text-slate-300 font-bold text-sm">vs</span>
-                            <ChevronRight className="w-3 h-3 text-slate-300 rotate-180" />
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Visitante */}
-                      <td className="py-4 px-4 text-left">
-                        <div className="flex items-center gap-2">
-                          {TEAMS.some(t => t.id === m.teamAwayId) ? (
-                            <TeamFlag teamId={m.teamAwayId} className="w-7 h-4.5 shrink-0" />
-                          ) : (
-                            <span className="text-slate-400 text-xs font-mono">{m.teamAwayId}</span>
+                  {/* Equipo Visitante */}
+                  <div className={`flex items-center justify-between px-4 py-3 ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon)) ? 'bg-emerald-50/30' : ''
+                    }`}>
+                    <div className="flex items-center gap-2.5">
+                      {isKnownTeam(m.teamAwayId) ? (
+                        <TeamFlag teamId={m.teamAwayId} className="w-7 h-5 shrink-0" />
+                      ) : (
+                        <span className="text-slate-300 text-lg">🌐</span>
+                      )}
+                      <span className={`font-bold text-sm ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon))
+                          ? 'text-emerald-700' : 'text-slate-800'
+                        }`}>
+                        {awayName}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      {hasResult ? (
+                        <div className="flex flex-col items-end">
+                          <span className={`font-extrabold text-xl font-mono ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon))
+                              ? 'text-emerald-600' : 'text-slate-400'
+                            }`}>
+                            {m.teamAwayScore}
+                          </span>
+                          {hasPenalties && (
+                            <span className="text-[10px] text-amber-600 font-bold">({m.penaltyAwayScore})</span>
                           )}
-                          <span className="font-bold text-sm text-slate-800">{awayName}</span>
                         </div>
-                      </td>
+                      ) : (
+                        <span className="text-slate-200 font-extrabold text-xl">-</span>
+                      )}
+                    </div>
+                  </div>
 
-                      {/* Fecha */}
-                      <td className="py-4 px-4 text-center hidden sm:table-cell">
-                        <span className="text-xs text-slate-400 font-medium">{m.date} · {m.time}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  {/* Footer penales */}
+                  {hasPenalties && (
+                    <div className="px-4 py-1.5 bg-amber-50 border-t border-amber-100 text-center">
+                      <span className="text-[10px] text-amber-700 font-bold">Definido en penales</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
