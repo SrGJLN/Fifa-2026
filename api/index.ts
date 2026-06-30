@@ -409,44 +409,6 @@ app.post('/api/recalculate', async (req, res) => {
   });
 });
 
-// Endpoint temporal para corregir cruces de R16 ya persistidos en Redis
-// (usar una sola vez, luego se puede eliminar este endpoint)
-app.post('/api/official/fix-r16-pairings', async (req, res) => {
-  const correctPairings: { [id: number]: { home: string; away: string } } = {
-    201: { home: 'G101', away: 'G102' },
-    202: { home: 'G103', away: 'G106' },
-    203: { home: 'G107', away: 'G108' },
-    204: { home: 'G111', away: 'G104' },
-    205: { home: 'G105', away: 'G116' },
-    206: { home: 'G112', away: 'G113' },
-    207: { home: 'G114', away: 'G115' },
-    208: { home: 'G109', away: 'G110' },
-  };
-
-  const store = await loadDb();
-
-  store.officialMatches = store.officialMatches.map(m => {
-    if (m.stage === 'r16' && correctPairings[m.id]) {
-      return {
-        ...m,
-        teamHomeId: correctPairings[m.id].home,
-        teamAwayId: correctPairings[m.id].away,
-      };
-    }
-    return m;
-  });
-
-  await saveDb(store);
-
-  res.json({
-    success: true,
-    officialMatches: store.officialMatches,
-    participants: store.participants,
-    officialThirds: store.officialThirds,
-    activePhase: store.activePhase || 'group'
-  });
-});
-
 app.post('/api/reset', async (req, res) => {
   if (!UPSTASH_REST_URL || !UPSTASH_REST_TOKEN) return res.status(500).json({ error: 'Faltan credenciales' });
 
