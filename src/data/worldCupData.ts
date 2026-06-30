@@ -189,16 +189,17 @@ export const generateR32Matches = (): Match[] => {
 };
 
 // 8 partidos para octavos (R16) - IDs 201 to 208
+// Cruces confirmados: 101v102, 103v106, 107v108, 111v104, 105v116, 112v113, 114v115, 109v110
 export const generateR16Matches = (): Match[] => {
   const pairings = [
     { id: 201, home: 'G101', away: 'G102', city: 'Los Ángeles', venue: 'SoFi Stadium' },
-    { id: 202, home: 'G103', away: 'G104', city: 'Houston', venue: 'NRG Stadium' },
-    { id: 203, home: 'G105', away: 'G106', city: 'Dallas', venue: 'AT&T Stadium' },
-    { id: 204, home: 'G107', away: 'G108', city: 'Atlanta', venue: 'Mercedes-Benz Stadium' },
-    { id: 205, home: 'G109', away: 'G110', city: 'Philadelphia', venue: 'Lincoln Financial Field' },
-    { id: 206, home: 'G111', away: 'G112', city: 'Seattle', venue: 'Lumen Field' },
-    { id: 207, home: 'G113', away: 'G114', city: 'Vancouver', venue: 'BC Place' },
-    { id: 208, home: 'G115', away: 'G116', city: 'New York / New Jersey', venue: 'MetLife Stadium' }
+    { id: 202, home: 'G103', away: 'G106', city: 'Houston', venue: 'NRG Stadium' },
+    { id: 203, home: 'G107', away: 'G108', city: 'Dallas', venue: 'AT&T Stadium' },
+    { id: 204, home: 'G111', away: 'G104', city: 'Atlanta', venue: 'Mercedes-Benz Stadium' },
+    { id: 205, home: 'G105', away: 'G116', city: 'Philadelphia', venue: 'Lincoln Financial Field' },
+    { id: 206, home: 'G112', away: 'G113', city: 'Seattle', venue: 'Lumen Field' },
+    { id: 207, home: 'G114', away: 'G115', city: 'Vancouver', venue: 'BC Place' },
+    { id: 208, home: 'G109', away: 'G110', city: 'New York / New Jersey', venue: 'MetLife Stadium' }
   ];
 
   return pairings.map((p, idx) => ({
