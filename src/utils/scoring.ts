@@ -15,14 +15,18 @@ export interface ScoreBreakdown {
  * Calculates a participant's score against official match results.
  *
  * FASE DE GRUPOS (sin penales):
- * - 3 pts: Marcador exacto (ej: predijo 2-1, fue 2-1)
+ * - 3 pts: Marcador exacto
  * - 1 pt:  Acierta ganador o empate pero no el marcador exacto
  * - 0 pts: No acierta nada
  *
  * FASES ELIMINATORIAS (puede haber penales):
- * - 5 pts: Acierta el empate exacto (ej: 1-1) Y acierta el ganador en penales
- * - 3 pts: Acierta el empate exacto pero falla penales. O acierta marcador exacto sin penales.
- * - 1 pt:  Acierta el ganador final (por goles o por penales) pero falla el marcador
+ * - 6 pts: Empate exacto + penales exactos
+ * - 4 pts: Empate exacto + acierta ganador en penales (sin marcador exacto de penales)
+ * - 3 pts: Empate exacto + falla ganador y marcador de penales
+ * - 3 pts: Acierta que hubo empate (sin marcador exacto) + acierta marcador exacto de penales y ganador
+ * - 3 pts: Marcador exacto sin empate (resuelto en tiempo normal)
+ * - 2 pts: Acierta que hubo empate (sin marcador exacto) + acierta solo ganador en penales
+ * - 1 pt:  Acierta solo el ganador final (tiempo normal o penales), sin marcador exacto
  * - 0 pts: No acierta nada
  */
 export const calculatePoints = (
@@ -69,44 +73,52 @@ export const calculatePoints = (
     const userPredictedDraw = userHome === userAway;
 
     if (officialWentToPenalties) {
-      // El partido oficial terminó empatado y se fue a penales
       const offPenHome = om.penaltyHomeScore!;
       const offPenAway = om.penaltyAwayScore!;
-
-      // Ganador oficial en penales
       const officialPenaltyWinner = offPenHome > offPenAway ? om.teamHomeId : om.teamAwayId;
 
+      const userPenHome = pick.penaltyHomeGoals;
+      const userPenAway = pick.penaltyAwayGoals;
+
+      const hasUserPenaltyPrediction = userPenHome !== undefined && userPenAway !== undefined;
+      const userPredictedPenaltyWinner = hasUserPenaltyPrediction
+        ? (userPenHome! > userPenAway! ? om.teamHomeId : om.teamAwayId)
+        : (pick.winnerId ?? null);
+
+      const aciertaGanadorPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
+      const aciertaPenalesExacto = hasUserPenaltyPrediction && userPenHome === offPenHome && userPenAway === offPenAway;
+
       if (userPredictedDraw) {
-        // El usuario también predijo empate
+        // El usuario predijo empate
         const exactDraw = userHome === offHome && userAway === offAway;
-        const userPenHome = pick.penaltyHomeGoals;
-        const userPenAway = pick.penaltyAwayGoals;
-        const userPredictedPenaltyWinner = userPenHome !== undefined && userPenAway !== undefined
-          ? (userPenHome > userPenAway ? om.teamHomeId : om.teamAwayId)
-          : pick.winnerId ?? null;
 
-        const aciertaPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
-
-        if (exactDraw && aciertaPenales) {
-          // 5 pts: empate exacto + ganador en penales correcto
-          totalPoints += 5;
+        if (exactDraw && aciertaPenalesExacto) {
+          // 6 pts: empate exacto + penales exactos
+          totalPoints += 6;
           exactCount++;
-        } else if (exactDraw && !aciertaPenales) {
-          // 3 pts: empate exacto pero falla penales
+        } else if (exactDraw && aciertaGanadorPenales) {
+          // 4 pts: empate exacto + acierta ganador en penales (sin marcador exacto de penales)
+          totalPoints += 4;
+          exactCount++;
+        } else if (exactDraw && !aciertaGanadorPenales) {
+          // 3 pts: empate exacto + falla ganador y marcador de penales
           totalPoints += 3;
           exactCount++;
-        } else if (!exactDraw && aciertaPenales) {
-          // 1 pt: acierta ganador en penales pero no el marcador exacto
-          totalPoints += 1;
+        } else if (!exactDraw && aciertaPenalesExacto) {
+          // 3 pts: acierta que hubo empate (sin marcador exacto) + acierta marcador exacto de penales y ganador
+          totalPoints += 3;
           outcomeCount++;
-        } else {
-          // 0 pts
+        } else if (!exactDraw && aciertaGanadorPenales) {
+          // 2 pts: acierta que hubo empate (sin marcador exacto) + acierta solo ganador en penales
+          totalPoints += 2;
+          outcomeCount++;
         }
+        // 0 pts si no acierta empate ni ganador en penales
       } else {
         // El usuario predijo un ganador (no empate)
         const userWinner = userHome > userAway ? om.teamHomeId : om.teamAwayId;
         if (userWinner === officialPenaltyWinner) {
-          // 1 pt: acierta el ganador final pero no predijo empate
+          // 1 pt: acierta el ganador final por penales pero no predijo empate
           totalPoints += 1;
           outcomeCount++;
         }
@@ -115,14 +127,14 @@ export const calculatePoints = (
     } else {
       // El partido oficial NO fue a penales (se resolvió en tiempo normal)
       if (userHome === offHome && userAway === offAway) {
-        // 3 pts: marcador exacto
+        // 3 pts: marcador exacto sin empate
         totalPoints += 3;
         exactCount++;
       } else {
         const userTrend = userHome > userAway ? 'home' : userHome < userAway ? 'away' : 'draw';
         const offTrend = offHome > offAway ? 'home' : offHome < offAway ? 'away' : 'draw';
         if (userTrend === offTrend) {
-          // 1 pt: acierta ganador o empate
+          // 1 pt: acierta ganador en tiempo normal
           totalPoints += 1;
           outcomeCount++;
         }
