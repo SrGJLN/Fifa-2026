@@ -24,38 +24,56 @@ interface BracketStageProps {
 }
 
 // Calcula puntos para partidos de bracket
+// NOTA: Esta lógica debe permanecer idéntica a utils/scoring.ts (calculatePoints)
+// para evitar inconsistencias entre el puntaje mostrado aquí y el puntaje real
+// guardado/calculado para el leaderboard. Si cambias las reglas, cambia ambos lugares.
 function calcBracketPoints(pick: MatchPick, match: Match): number | null {
   if (!match.completed || match.teamHomeScore === undefined || match.teamAwayScore === undefined) return null;
   if (pick.teamHomeGoals === undefined || pick.teamAwayGoals === undefined) return null;
 
-  const officialWentToPenalties = match.teamHomeScore === match.teamAwayScore &&
+  const userHome = Number(pick.teamHomeGoals);
+  const userAway = Number(pick.teamAwayGoals);
+  const offHome = Number(match.teamHomeScore);
+  const offAway = Number(match.teamAwayScore);
+
+  const officialWentToPenalties = offHome === offAway &&
     match.penaltyHomeScore !== undefined && match.penaltyAwayScore !== undefined;
 
-  const userPredictedDraw = pick.teamHomeGoals === pick.teamAwayGoals;
+  const userPredictedDraw = userHome === userAway;
 
   if (officialWentToPenalties) {
-    const officialPenaltyWinner = (match.penaltyHomeScore! > match.penaltyAwayScore!)
-      ? match.teamHomeId : match.teamAwayId;
+    const offPenHome = match.penaltyHomeScore!;
+    const offPenAway = match.penaltyAwayScore!;
+    const officialPenaltyWinner = offPenHome > offPenAway ? match.teamHomeId : match.teamAwayId;
+
+    const userPenHome = pick.penaltyHomeGoals;
+    const userPenAway = pick.penaltyAwayGoals;
+
+    const hasUserPenaltyPrediction = userPenHome !== undefined && userPenAway !== undefined;
+    const userPredictedPenaltyWinner = hasUserPenaltyPrediction
+      ? (userPenHome! > userPenAway! ? match.teamHomeId : match.teamAwayId)
+      : (pick.winnerId ?? null);
+
+    const aciertaGanadorPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
+    const aciertaPenalesExacto = hasUserPenaltyPrediction && userPenHome === offPenHome && userPenAway === offPenAway;
 
     if (userPredictedDraw) {
-      const exactDraw = pick.teamHomeGoals === match.teamHomeScore && pick.teamAwayGoals === match.teamAwayScore;
-      const userPenaltyWinner = pick.penaltyHomeGoals !== undefined && pick.penaltyAwayGoals !== undefined
-        ? (pick.penaltyHomeGoals > pick.penaltyAwayGoals ? match.teamHomeId : match.teamAwayId)
-        : pick.winnerId ?? null;
-      const aciertaPenales = userPenaltyWinner === officialPenaltyWinner;
+      const exactDraw = userHome === offHome && userAway === offAway;
 
-      if (exactDraw && aciertaPenales) return 5;
-      if (exactDraw && !aciertaPenales) return 3;
-      if (!exactDraw && aciertaPenales) return 1;
+      if (exactDraw && aciertaPenalesExacto) return 6;
+      if (exactDraw && aciertaGanadorPenales) return 4;
+      if (exactDraw && !aciertaGanadorPenales) return 3;
+      if (!exactDraw && aciertaPenalesExacto) return 3;
+      if (!exactDraw && aciertaGanadorPenales) return 2;
       return 0;
     } else {
-      const userWinner = pick.teamHomeGoals > pick.teamAwayGoals ? match.teamHomeId : match.teamAwayId;
+      const userWinner = userHome > userAway ? match.teamHomeId : match.teamAwayId;
       return userWinner === officialPenaltyWinner ? 1 : 0;
     }
   } else {
-    if (pick.teamHomeGoals === match.teamHomeScore && pick.teamAwayGoals === match.teamAwayScore) return 3;
-    const userTrend = pick.teamHomeGoals > pick.teamAwayGoals ? 'home' : pick.teamHomeGoals < pick.teamAwayGoals ? 'away' : 'draw';
-    const offTrend = match.teamHomeScore > match.teamAwayScore ? 'home' : match.teamHomeScore < match.teamAwayScore ? 'away' : 'draw';
+    if (userHome === offHome && userAway === offAway) return 3;
+    const userTrend = userHome > userAway ? 'home' : userHome < userAway ? 'away' : 'draw';
+    const offTrend = offHome > offAway ? 'home' : offHome < offAway ? 'away' : 'draw';
     return userTrend === offTrend ? 1 : 0;
   }
 }
@@ -232,8 +250,8 @@ export default function BracketStage({
                       key={team.teamId}
                       onClick={() => handleToggleThird(team.teamId)}
                       className={`p-3 border rounded-xl relative cursor-pointer text-center select-none transition-all ${isSelected ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold'
-                          : isSuggested ? 'border-slate-200 bg-emerald-50/10 hover:border-indigo-400'
-                            : 'border-slate-100 hover:border-indigo-200 bg-white'
+                        : isSuggested ? 'border-slate-200 bg-emerald-50/10 hover:border-indigo-400'
+                          : 'border-slate-100 hover:border-indigo-200 bg-white'
                         }`}
                     >
                       <span className="text-[10px] font-bold text-slate-400 block mb-1">3ro G{team.groupLabel}</span>
@@ -297,11 +315,13 @@ export default function BracketStage({
 
           // Puntos obtenidos (solo en readOnly)
           const points = readOnly ? calcBracketPoints(pick, m) : null;
-          const pointsColor = points === 5 ? 'bg-amber-500 text-white'
-            : points === 3 ? 'bg-emerald-500 text-white'
-              : points === 1 ? 'bg-indigo-500 text-white'
-                : points === 0 ? 'bg-rose-500 text-white'
-                  : 'bg-slate-100 text-slate-400';
+          const pointsColor = points === 6 ? 'bg-amber-500 text-white'
+            : points === 4 ? 'bg-amber-400 text-white'
+              : points === 3 ? 'bg-emerald-500 text-white'
+                : points === 2 ? 'bg-teal-500 text-white'
+                  : points === 1 ? 'bg-indigo-500 text-white'
+                    : points === 0 ? 'bg-rose-500 text-white'
+                      : 'bg-slate-100 text-slate-400';
 
           // Resultado oficial de penales
           const officialHasPenalties = m.completed && m.teamHomeScore === m.teamAwayScore
@@ -311,8 +331,8 @@ export default function BracketStage({
             <div
               key={m.id}
               className={`bg-white border rounded-3xl p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow relative overflow-hidden ${hasTiePredicted && !readOnly && pick.winnerId === undefined && penHStr === ''
-                  ? 'border-indigo-200 ring-2 ring-indigo-500/20'
-                  : 'border-slate-100'
+                ? 'border-indigo-200 ring-2 ring-indigo-500/20'
+                : 'border-slate-100'
                 }`}
             >
               {/* Puntos obtenidos */}

@@ -187,24 +187,38 @@ export default function Sincronizador({
             </p>
             <ul className="space-y-3 text-sm">
               <li className="flex items-start gap-2.5">
-                <span className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">5</span>
+                <span className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">6</span>
                 <div>
-                  <p className="font-semibold text-slate-100">Empate Exacto + Penales</p>
-                  <p className="text-xs text-slate-400">Acierta el empate exacto y el ganador en penales.</p>
+                  <p className="font-semibold text-slate-100">Empate Exacto + Penales Exactos</p>
+                  <p className="text-xs text-slate-400">Acierta el empate exacto, el ganador y el marcador exacto de penales.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-amber-400 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">4</span>
+                <div>
+                  <p className="font-semibold text-slate-100">Empate Exacto + Ganador en Penales</p>
+                  <p className="text-xs text-slate-400">Acierta el empate exacto y el ganador en penales, sin acertar el marcador exacto de penales.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">3</span>
                 <div>
                   <p className="font-semibold text-slate-100">Acierto Exacto</p>
-                  <p className="text-xs text-slate-400">Marcador exacto, o empate exacto sin acertar penales.</p>
+                  <p className="text-xs text-slate-400">Marcador exacto (resuelto en tiempo normal), o empate exacto sin acertar el ganador de penales.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-teal-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">2</span>
+                <div>
+                  <p className="font-semibold text-slate-100">Empate (sin marcador exacto) + Ganador en Penales</p>
+                  <p className="text-xs text-slate-400">Acierta que hubo empate, sin el marcador exacto, y acierta solo el ganador en penales.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">1</span>
                 <div>
                   <p className="font-semibold text-slate-100">Acierto de Ganador</p>
-                  <p className="text-xs text-slate-400">Acierta el ganador final pero no el marcador exacto.</p>
+                  <p className="text-xs text-slate-400">Acierta el ganador final (tiempo normal o penales) pero no el marcador exacto.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
@@ -381,8 +395,8 @@ export default function Sincronizador({
                     key={team.teamId}
                     onClick={() => handleToggleThird(team.teamId)}
                     className={`flex items-center justify-between p-3.5 border rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                        : isHighlight ? 'border-indigo-100 bg-indigo-50/20 hover:border-indigo-300'
-                          : 'border-slate-100 hover:border-slate-300 bg-slate-50/10'
+                      : isHighlight ? 'border-indigo-100 bg-indigo-50/20 hover:border-indigo-300'
+                        : 'border-slate-100 hover:border-slate-300 bg-slate-50/10'
                       }`}
                   >
                     <div className="flex items-center gap-3">
