@@ -22,7 +22,6 @@ interface BracketStageProps {
   participantName?: string;
 }
 
-// Calcula puntos para partidos de bracket con reglas actualizadas
 function calcBracketPoints(pick: MatchPick, match: Match): number | null {
   if (!match.completed || match.teamHomeScore === undefined || match.teamAwayScore === undefined) return null;
   if (pick.teamHomeGoals === undefined || pick.teamAwayGoals === undefined) return null;
@@ -45,19 +44,15 @@ function calcBracketPoints(pick: MatchPick, match: Match): number | null {
 
     if (userPredictedDraw) {
       const exactDraw = userHome === offHome && userAway === offAway;
-
       const userPenHome = pick.penaltyHomeGoals;
       const userPenAway = pick.penaltyAwayGoals;
       const hasUserPenaltyPrediction = userPenHome !== undefined && userPenAway !== undefined;
-
       const aciertaPenalesExacto = hasUserPenaltyPrediction &&
         Number(userPenHome) === offPenHome &&
         Number(userPenAway) === offPenAway;
-
       const userPredictedPenaltyWinner = hasUserPenaltyPrediction
         ? (Number(userPenHome!) > Number(userPenAway!) ? match.teamHomeId : match.teamAwayId)
         : (pick.winnerId ?? null);
-
       const aciertaGanadorPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
 
       if (exactDraw && aciertaPenalesExacto) return 6;
@@ -67,11 +62,9 @@ function calcBracketPoints(pick: MatchPick, match: Match): number | null {
       if (!exactDraw && aciertaGanadorPenales) return 2;
       return 0;
     } else {
-      // Usuario NO predijo empate — partido fue a penales — 0 puntos
       return 0;
     }
   } else {
-    // Partido resuelto en tiempo normal
     if (userHome === offHome && userAway === offAway) return 3;
     const userTrend = userHome > userAway ? 'home' : userHome < userAway ? 'away' : 'draw';
     const offTrend = offHome > offAway ? 'home' : offHome < offAway ? 'away' : 'draw';
@@ -378,9 +371,11 @@ export default function BracketStage({
                       className="w-11 h-11 border border-slate-300 rounded-xl text-center font-extrabold text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
-                  {readOnly && officialHasPenalties ? (
-                    <span className="text-[10px] text-amber-600 font-extrabold tracking-wider">
-                      PENALES: {m.penaltyHomeScore} - {m.penaltyAwayScore}
+                  {/* Resultado oficial */}
+                  {readOnly && m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined ? (
+                    <span className="text-[10px] text-slate-500 font-extrabold tracking-wider">
+                      OFICIAL: {m.teamHomeScore} - {m.teamAwayScore}
+                      {officialHasPenalties && ` (Pen: ${m.penaltyHomeScore}-${m.penaltyAwayScore})`}
                     </span>
                   ) : (
                     <span className="text-[9px] tracking-wider text-slate-400 font-extrabold">PRONÓSTICO</span>
