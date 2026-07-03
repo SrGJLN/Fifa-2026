@@ -20,13 +20,9 @@ interface BracketStageProps {
   onChangeSelectedThirds: (thirds: string[]) => void;
   readOnly?: boolean;
   participantName?: string;
-  hideThirdsSelector?: boolean;
 }
 
-// Calcula puntos para partidos de bracket
-// NOTA: Esta lógica debe permanecer idéntica a utils/scoring.ts (calculatePoints)
-// para evitar inconsistencias entre el puntaje mostrado aquí y el puntaje real
-// guardado/calculado para el leaderboard. Si cambias las reglas, cambia ambos lugares.
+// Calcula puntos para partidos de bracket con reglas actualizadas
 function calcBracketPoints(pick: MatchPick, match: Match): number | null {
   if (!match.completed || match.teamHomeScore === undefined || match.teamAwayScore === undefined) return null;
   if (pick.teamHomeGoals === undefined || pick.teamAwayGoals === undefined) return null;
@@ -37,7 +33,8 @@ function calcBracketPoints(pick: MatchPick, match: Match): number | null {
   const offAway = Number(match.teamAwayScore);
 
   const officialWentToPenalties = offHome === offAway &&
-    match.penaltyHomeScore !== undefined && match.penaltyAwayScore !== undefined;
+    match.penaltyHomeScore !== undefined &&
+    match.penaltyAwayScore !== undefined;
 
   const userPredictedDraw = userHome === userAway;
 
@@ -46,19 +43,22 @@ function calcBracketPoints(pick: MatchPick, match: Match): number | null {
     const offPenAway = match.penaltyAwayScore!;
     const officialPenaltyWinner = offPenHome > offPenAway ? match.teamHomeId : match.teamAwayId;
 
-    const userPenHome = pick.penaltyHomeGoals;
-    const userPenAway = pick.penaltyAwayGoals;
-
-    const hasUserPenaltyPrediction = userPenHome !== undefined && userPenAway !== undefined;
-    const userPredictedPenaltyWinner = hasUserPenaltyPrediction
-      ? (userPenHome! > userPenAway! ? match.teamHomeId : match.teamAwayId)
-      : (pick.winnerId ?? null);
-
-    const aciertaGanadorPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
-    const aciertaPenalesExacto = hasUserPenaltyPrediction && userPenHome === offPenHome && userPenAway === offPenAway;
-
     if (userPredictedDraw) {
       const exactDraw = userHome === offHome && userAway === offAway;
+
+      const userPenHome = pick.penaltyHomeGoals;
+      const userPenAway = pick.penaltyAwayGoals;
+      const hasUserPenaltyPrediction = userPenHome !== undefined && userPenAway !== undefined;
+
+      const aciertaPenalesExacto = hasUserPenaltyPrediction &&
+        Number(userPenHome) === offPenHome &&
+        Number(userPenAway) === offPenAway;
+
+      const userPredictedPenaltyWinner = hasUserPenaltyPrediction
+        ? (Number(userPenHome!) > Number(userPenAway!) ? match.teamHomeId : match.teamAwayId)
+        : (pick.winnerId ?? null);
+
+      const aciertaGanadorPenales = userPredictedPenaltyWinner === officialPenaltyWinner;
 
       if (exactDraw && aciertaPenalesExacto) return 6;
       if (exactDraw && aciertaGanadorPenales) return 4;
@@ -67,10 +67,11 @@ function calcBracketPoints(pick: MatchPick, match: Match): number | null {
       if (!exactDraw && aciertaGanadorPenales) return 2;
       return 0;
     } else {
-      const userWinner = userHome > userAway ? match.teamHomeId : match.teamAwayId;
-      return userWinner === officialPenaltyWinner ? 1 : 0;
+      // Usuario NO predijo empate — partido fue a penales — 0 puntos
+      return 0;
     }
   } else {
+    // Partido resuelto en tiempo normal
     if (userHome === offHome && userAway === offAway) return 3;
     const userTrend = userHome > userAway ? 'home' : userHome < userAway ? 'away' : 'draw';
     const offTrend = offHome > offAway ? 'home' : offHome < offAway ? 'away' : 'draw';
@@ -88,7 +89,6 @@ export default function BracketStage({
   onChangeSelectedThirds,
   readOnly = false,
   participantName,
-  hideThirdsSelector = false,
 }: BracketStageProps) {
   const [activeStageTab, setActiveStageTab] = useState<string>('r32');
 
@@ -109,9 +109,8 @@ export default function BracketStage({
   const calculatedThirds = getThirdPlaceTeams(groupMatches, groupPicks);
 
   const resolveTeam = (placeholder: string): Team | null => {
-    const foundTeam = TEAMS.find((team) => team.id === placeholder);
-    if (foundTeam) {
-      return foundTeam;
+    if (placeholder.length === 3 && placeholder === placeholder.toUpperCase() && !placeholder.startsWith('G') && !placeholder.startsWith('P')) {
+      return TEAMS.find((team) => team.id === placeholder) || null;
     }
     if (placeholder.match(/^[12][A-L]$/)) {
       const idx = parseInt(placeholder.charAt(0), 10) - 1;
@@ -124,10 +123,10 @@ export default function BracketStage({
       const teamId = selectedThirds[orderIdx];
       return teamId ? (TEAMS.find((team) => team.id === teamId) || null) : null;
     }
-    if (placeholder.match(/^G\d+$/)) {
+    if (placeholder.startsWith('G')) {
       return resolveMatchWinner(parseInt(placeholder.substring(1), 10));
     }
-    if (placeholder.match(/^P\d+$/)) {
+    if (placeholder.startsWith('P')) {
       return resolveMatchLoser(parseInt(placeholder.substring(1), 10));
     }
     return null;
@@ -145,7 +144,6 @@ export default function BracketStage({
     const awayG = Number(pick.teamAwayGoals);
     if (homeG > awayG) return teamHome;
     if (awayG > homeG) return teamAway;
-    // Empate: usar winnerId o resultado de penales
     const penaltyWinner = pick.penaltyHomeGoals !== undefined && pick.penaltyAwayGoals !== undefined
       ? (pick.penaltyHomeGoals > pick.penaltyAwayGoals ? teamHome : teamAway)
       : null;
@@ -173,7 +171,7 @@ export default function BracketStage({
       nextThirds = nextThirds.filter((id) => id !== teamId);
     } else {
       if (nextThirds.length >= 8) {
-        alert('Solo puedes seleccionar los 8 mejores terceros lugares para avanzar a Dieciseisavos (R32).');
+        alert('Solo puedes seleccionar los 8 mejores terceros lugares.');
         return;
       }
       nextThirds.push(teamId);
@@ -187,7 +185,6 @@ export default function BracketStage({
     const numeric = val.trim() === '' ? undefined : Math.max(0, parseInt(val, 10));
     const hG = side === 'home' ? numeric : current.teamHomeGoals;
     const aG = side === 'away' ? numeric : current.teamAwayGoals;
-    // Si ya no hay empate, limpiar penales y winnerId
     let wId = current.winnerId;
     let penH = current.penaltyHomeGoals;
     let penA = current.penaltyAwayGoals;
@@ -205,7 +202,6 @@ export default function BracketStage({
     const numeric = val.trim() === '' ? undefined : Math.max(0, parseInt(val, 10));
     const penH = side === 'home' ? numeric : current.penaltyHomeGoals;
     const penA = side === 'away' ? numeric : current.penaltyAwayGoals;
-    // Determinar winnerId automáticamente según penales
     let wId = current.winnerId;
     if (penH !== undefined && penA !== undefined && penH !== penA) {
       const resolvedHome = resolveTeam(bracketMatches.find(m => m.id === matchId)?.teamHomeId || '');
@@ -223,21 +219,20 @@ export default function BracketStage({
   return (
     <div className="space-y-8" id="bracket-predictions">
 
-      {/* SELECCIÓN DE MEJORES TERCEROS */}
-      {activeStageTab === 'r32' && !hideThirdsSelector && (
+      {/* SELECCIÓN DE MEJORES TERCEROS — solo en r32 y no en readOnly */}
+      {activeStageTab === 'r32' && !readOnly && (
         <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-5 h-5 text-indigo-500" />
             <h3 className="text-base font-bold text-slate-800">Tus 8 Mejores Terceros Lugares</h3>
           </div>
           <p className="text-slate-500 text-xs mb-5 max-w-4xl font-medium leading-relaxed">
-            De acuerdo a tus predicciones de la Fase de Grupos, se han calculado los siguientes 3ros lugares de cada uno de los 12 grupos.
+            De acuerdo a tus predicciones de la Fase de Grupos, se han calculado los siguientes 3ros lugares.
             <strong> Selecciona los 8 oficiales</strong> que clasificarán a tu ronda de Dieciseisavos de Final (T1 a T8).
           </p>
           {calculatedThirds.length === 0 ? (
-            <div className="p-4 rounded-xl bg-amber-50 text-amber-800 border border-amber-200/60 text-xs font-semibold flex items-center gap-2">
-              <InfoOutlineIcon />
-              <span>Aún no hay terceros calculados. Empieza ingresando predicciones de fase de grupos para activarlos.</span>
+            <div className="p-4 rounded-xl bg-amber-50 text-amber-800 border border-amber-200/60 text-xs font-semibold">
+              Aún no hay terceros calculados. Ingresa predicciones de fase de grupos para activarlos.
             </div>
           ) : (
             <div className="space-y-4">
@@ -250,8 +245,8 @@ export default function BracketStage({
                       key={team.teamId}
                       onClick={() => handleToggleThird(team.teamId)}
                       className={`p-3 border rounded-xl relative cursor-pointer text-center select-none transition-all ${isSelected ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold'
-                        : isSuggested ? 'border-slate-200 bg-emerald-50/10 hover:border-indigo-400'
-                          : 'border-slate-100 hover:border-indigo-200 bg-white'
+                          : isSuggested ? 'border-slate-200 bg-emerald-50/10 hover:border-indigo-400'
+                            : 'border-slate-100 hover:border-indigo-200 bg-white'
                         }`}
                     >
                       <span className="text-[10px] font-bold text-slate-400 block mb-1">3ro G{team.groupLabel}</span>
@@ -271,7 +266,6 @@ export default function BracketStage({
                 <span className={`px-2.5 py-0.5 rounded-full font-bold shadow-sm ${selectedThirds.length === 8 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                   {selectedThirds.length} / 8 Seleccionados
                 </span>
-                <span className="text-slate-400 font-semibold">(Esto llena los puestos vacíos T1, T2,... T8 en la llave a continuación).</span>
               </div>
             </div>
           )}
@@ -308,31 +302,27 @@ export default function BracketStage({
           const hGoalsStr = pick.teamHomeGoals !== undefined ? String(pick.teamHomeGoals) : '';
           const aGoalsStr = pick.teamAwayGoals !== undefined ? String(pick.teamAwayGoals) : '';
           const hasTiePredicted = pick.teamHomeGoals !== undefined && pick.teamAwayGoals !== undefined && Number(pick.teamHomeGoals) === Number(pick.teamAwayGoals);
-
-          // Penales predichos
           const penHStr = pick.penaltyHomeGoals !== undefined ? String(pick.penaltyHomeGoals) : '';
           const penAStr = pick.penaltyAwayGoals !== undefined ? String(pick.penaltyAwayGoals) : '';
-
-          // Puntos obtenidos (solo en readOnly)
           const points = readOnly ? calcBracketPoints(pick, m) : null;
-          const pointsColor = points === 6 ? 'bg-amber-500 text-white'
-            : points === 4 ? 'bg-amber-400 text-white'
+
+          const pointsColor = points === 6 ? 'bg-yellow-400 text-slate-900'
+            : points === 4 ? 'bg-orange-500 text-white'
               : points === 3 ? 'bg-emerald-500 text-white'
                 : points === 2 ? 'bg-teal-500 text-white'
                   : points === 1 ? 'bg-indigo-500 text-white'
                     : points === 0 ? 'bg-rose-500 text-white'
                       : 'bg-slate-100 text-slate-400';
 
-          // Resultado oficial de penales
           const officialHasPenalties = m.completed && m.teamHomeScore === m.teamAwayScore
             && m.penaltyHomeScore !== undefined && m.penaltyAwayScore !== undefined;
 
           return (
             <div
               key={m.id}
-              className={`bg-white border rounded-3xl p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow relative overflow-hidden ${hasTiePredicted && !readOnly && pick.winnerId === undefined && penHStr === ''
-                ? 'border-indigo-200 ring-2 ring-indigo-500/20'
-                : 'border-slate-100'
+              className={`bg-white border rounded-3xl p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow relative overflow-hidden ${hasTiePredicted && !readOnly && penHStr === ''
+                  ? 'border-indigo-200 ring-2 ring-indigo-500/20'
+                  : 'border-slate-100'
                 }`}
             >
               {/* Puntos obtenidos */}
@@ -388,7 +378,6 @@ export default function BracketStage({
                       className="w-11 h-11 border border-slate-300 rounded-xl text-center font-extrabold text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
-                  {/* Resultado oficial de penales en modo lectura */}
                   {readOnly && officialHasPenalties ? (
                     <span className="text-[10px] text-amber-600 font-extrabold tracking-wider">
                       PENALES: {m.penaltyHomeScore} - {m.penaltyAwayScore}
@@ -417,7 +406,7 @@ export default function BracketStage({
                 <span>{m.venue} ({m.city})</span>
               </div>
 
-              {/* Panel de penales — cuando el usuario predice empate */}
+              {/* Panel de penales — cuando el usuario predice empate y no es readOnly */}
               {hasTiePredicted && resolvedHome && resolvedAway && !readOnly && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-2">
                   <p className="text-xs font-bold text-amber-900 text-center flex items-center justify-center gap-1">
@@ -472,13 +461,5 @@ export default function BracketStage({
       </div>
 
     </div>
-  );
-}
-
-function InfoOutlineIcon() {
-  return (
-    <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
   );
 }
