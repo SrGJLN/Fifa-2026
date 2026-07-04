@@ -111,7 +111,6 @@ async function saveDb(store: DbStore) {
   }
 }
 
-// Calcula puntos correctamente separando grupos de bracket
 function calcAllPoints(p: Participant, officialMatches: Match[]) {
   const groupMatches = officialMatches.filter(m => m.stage === 'group');
   const bracketMatches = officialMatches.filter(m => m.stage !== 'group');
@@ -200,7 +199,6 @@ app.post('/api/predictions', async (req, res) => {
   const formattedName = name.trim();
   const id = 'user_' + Math.random().toString(36).substring(2, 11);
 
-  // Separar grupos de bracket para calcular correctamente
   const groupMatches = store.officialMatches.filter(m => m.stage === 'group');
   const bracketMatches = store.officialMatches.filter(m => m.stage !== 'group');
   const groupPts = calculatePoints(groupPicks || {}, groupMatches);
@@ -281,8 +279,6 @@ app.post('/api/predictions/:id/bracket', async (req, res) => {
   };
 
   const updatedSelectedThirds = selectedThirds || p.selectedThirds;
-
-  // Calcular puntos correctamente separando grupos de bracket
   const updatedP = { ...p, bracketPicks: updatedBracketPicks };
   const pts = calcAllPoints(updatedP, store.officialMatches);
 
@@ -398,7 +394,38 @@ app.post('/api/official/update-thirds', async (req, res) => {
   });
 });
 
-// Endpoint para recalcular y recuperar puntos perdidos
+// Actualizar fixture de una fase específica sin borrar resultados
+app.post('/api/update-fixture', async (req, res) => {
+  const store = await loadDb();
+
+  const newR16 = ALL_INITIAL_MATCHES.filter(m => m.stage === 'r16');
+
+  store.officialMatches = store.officialMatches.map(m => {
+    if (m.stage === 'r16') {
+      const newMatch = newR16.find(nm => nm.id === m.id);
+      if (newMatch) {
+        return {
+          ...newMatch,
+          teamHomeScore: m.teamHomeScore,
+          teamAwayScore: m.teamAwayScore,
+          completed: m.completed,
+          winnerId: m.winnerId,
+          penaltyHomeScore: m.penaltyHomeScore,
+          penaltyAwayScore: m.penaltyAwayScore
+        };
+      }
+    }
+    return m;
+  });
+
+  await saveDb(store);
+
+  res.json({
+    success: true,
+    officialMatches: store.officialMatches
+  });
+});
+
 app.post('/api/recalculate', async (req, res) => {
   const store = await loadDb();
   recalculateAllParticipants(store);
