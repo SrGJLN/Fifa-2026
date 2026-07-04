@@ -154,7 +154,6 @@ export const generateGroupMatches = (): Match[] => {
   return matches;
 };
 
-// 16 partidos para dieciseisavos (R32) — cruces reales confirmados
 export const generateR32Matches = (): Match[] => {
   const pairings = [
     { id: 101, home: 'RSA', away: 'CAN', date: '29 jun', time: '15:00', city: 'Ciudad de México', venue: 'Estadio Azteca' },
@@ -188,34 +187,31 @@ export const generateR32Matches = (): Match[] => {
   }));
 };
 
-// 8 partidos para octavos (R16) - IDs 201 to 208
-// Cruces confirmados: 101v102, 103v106, 107v108, 111v104, 105v116, 112v113, 114v115, 109v110
 export const generateR16Matches = (): Match[] => {
   const pairings = [
-    { id: 201, home: 'G101', away: 'G102', city: 'Los Ángeles', venue: 'SoFi Stadium' },
-    { id: 202, home: 'G103', away: 'G106', city: 'Houston', venue: 'NRG Stadium' },
-    { id: 203, home: 'G107', away: 'G108', city: 'Dallas', venue: 'AT&T Stadium' },
-    { id: 204, home: 'G111', away: 'G104', city: 'Atlanta', venue: 'Mercedes-Benz Stadium' },
-    { id: 205, home: 'G105', away: 'G116', city: 'Philadelphia', venue: 'Lincoln Financial Field' },
-    { id: 206, home: 'G112', away: 'G113', city: 'Seattle', venue: 'Lumen Field' },
-    { id: 207, home: 'G114', away: 'G115', city: 'Vancouver', venue: 'BC Place' },
-    { id: 208, home: 'G109', away: 'G110', city: 'New York / New Jersey', venue: 'MetLife Stadium' }
+    { id: 201, home: 'MAR', away: 'CAN', date: '4 jul', time: '13:00', city: 'Los Ángeles', venue: 'SoFi Stadium' },
+    { id: 202, home: 'PAR', away: 'FRA', date: '4 jul', time: '19:00', city: 'Houston', venue: 'NRG Stadium' },
+    { id: 203, home: 'USA', away: 'BEL', date: '5 jul', time: '13:00', city: 'Dallas', venue: 'AT&T Stadium' },
+    { id: 204, home: 'POR', away: 'ESP', date: '5 jul', time: '19:00', city: 'Atlanta', venue: 'Mercedes-Benz Stadium' },
+    { id: 205, home: 'BRA', away: 'NOR', date: '6 jul', time: '13:00', city: 'Vancouver', venue: 'BC Place' },
+    { id: 206, home: 'MEX', away: 'ENG', date: '6 jul', time: '19:00', city: 'Seattle', venue: 'Lumen Field' },
+    { id: 207, home: 'SUI', away: 'COL', date: '7 jul', time: '13:00', city: 'Philadelphia', venue: 'Lincoln Financial Field' },
+    { id: 208, home: 'ARG', away: 'EGY', date: '7 jul', time: '19:00', city: 'New York / New Jersey', venue: 'MetLife Stadium' },
   ];
 
-  return pairings.map((p, idx) => ({
+  return pairings.map(p => ({
     id: p.id,
     stage: 'r16',
     teamHomeId: p.home,
     teamAwayId: p.away,
-    date: `${4 + Math.floor(idx / 2)} jul`,
-    time: idx % 2 === 0 ? '15:00' : '19:00',
+    date: p.date,
+    time: p.time,
     venue: p.venue,
     city: p.city,
     completed: false
   }));
 };
 
-// 4 partidos para cuartos (QF) - IDs 301 to 304
 export const generateQFMatches = (): Match[] => {
   const pairings = [
     { id: 301, home: 'G201', away: 'G202', city: 'Boston', venue: 'Gillette Stadium' },
@@ -237,7 +233,6 @@ export const generateQFMatches = (): Match[] => {
   }));
 };
 
-// 2 partidos para semifinales (SF) - IDs 401 and 402
 export const generateSFMatches = (): Match[] => {
   return [
     {
@@ -265,7 +260,6 @@ export const generateSFMatches = (): Match[] => {
   ];
 };
 
-// 1 partido para tercer lugar - ID 501
 export const generateThirdPlaceMatch = (): Match[] => {
   return [
     {
@@ -282,7 +276,6 @@ export const generateThirdPlaceMatch = (): Match[] => {
   ];
 };
 
-// 1 partido para final - ID 601
 export const generateFinalMatch = (): Match[] => {
   return [
     {
