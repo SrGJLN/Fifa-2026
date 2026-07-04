@@ -20,6 +20,7 @@ interface BracketStageProps {
   onChangeSelectedThirds: (thirds: string[]) => void;
   readOnly?: boolean;
   participantName?: string;
+  officialMatches?: Match[];
 }
 
 function calcBracketPoints(pick: MatchPick, match: Match): number | null {
@@ -82,6 +83,7 @@ export default function BracketStage({
   onChangeSelectedThirds,
   readOnly = false,
   participantName,
+  officialMatches = [],
 }: BracketStageProps) {
   const [activeStageTab, setActiveStageTab] = useState<string>('r32');
 
@@ -102,9 +104,10 @@ export default function BracketStage({
   const calculatedThirds = getThirdPlaceTeams(groupMatches, groupPicks);
 
   const resolveTeam = (placeholder: string): Team | null => {
-    if (placeholder.length === 3 && placeholder === placeholder.toUpperCase() && !placeholder.startsWith('G') && !placeholder.startsWith('P')) {
-      return TEAMS.find((team) => team.id === placeholder) || null;
-    }
+    // Primero verificar si es un equipo real en TEAMS
+    const directTeam = TEAMS.find(t => t.id === placeholder);
+    if (directTeam) return directTeam;
+
     if (placeholder.match(/^[12][A-L]$/)) {
       const idx = parseInt(placeholder.charAt(0), 10) - 1;
       const g = placeholder.charAt(1);
@@ -131,6 +134,22 @@ export default function BracketStage({
     const teamHome = resolveTeam(parentMatch.teamHomeId);
     const teamAway = resolveTeam(parentMatch.teamAwayId);
     if (!teamHome || !teamAway) return null;
+
+    // Primero intentar resolver con resultado oficial
+    const officialMatch = officialMatches?.find(m => m.id === matchId);
+    if (officialMatch?.completed && officialMatch.teamHomeScore !== undefined && officialMatch.teamAwayScore !== undefined) {
+      const offHome = officialMatch.teamHomeScore;
+      const offAway = officialMatch.teamAwayScore;
+      if (offHome > offAway) return teamHome;
+      if (offAway > offHome) return teamAway;
+      if (officialMatch.penaltyHomeScore !== undefined && officialMatch.penaltyAwayScore !== undefined) {
+        return officialMatch.penaltyHomeScore > officialMatch.penaltyAwayScore ? teamHome : teamAway;
+      }
+      if (officialMatch.winnerId === teamHome.id) return teamHome;
+      if (officialMatch.winnerId === teamAway.id) return teamAway;
+    }
+
+    // Si no hay resultado oficial, usar predicción del usuario
     const pick = bracketPicks[matchId];
     if (!pick || pick.teamHomeGoals === undefined || pick.teamAwayGoals === undefined) return null;
     const homeG = Number(pick.teamHomeGoals);
@@ -401,7 +420,7 @@ export default function BracketStage({
                 <span>{m.venue} ({m.city})</span>
               </div>
 
-              {/* Panel de penales — cuando el usuario predice empate y no es readOnly */}
+              {/* Panel de penales */}
               {hasTiePredicted && resolvedHome && resolvedAway && !readOnly && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-2">
                   <p className="text-xs font-bold text-amber-900 text-center flex items-center justify-center gap-1">
