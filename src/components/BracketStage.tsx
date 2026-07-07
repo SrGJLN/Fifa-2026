@@ -231,59 +231,6 @@ export default function BracketStage({
   return (
     <div className="space-y-8" id="bracket-predictions">
 
-      {/* SELECCIÓN DE MEJORES TERCEROS — solo en r32 y no en readOnly */}
-      {activeStageTab === 'r32' && !readOnly && (
-        <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-5 h-5 text-indigo-500" />
-            <h3 className="text-base font-bold text-slate-800">Tus 8 Mejores Terceros Lugares</h3>
-          </div>
-          <p className="text-slate-500 text-xs mb-5 max-w-4xl font-medium leading-relaxed">
-            De acuerdo a tus predicciones de la Fase de Grupos, se han calculado los siguientes 3ros lugares.
-            <strong> Selecciona los 8 oficiales</strong> que clasificarán a tu ronda de Dieciseisavos de Final (T1 a T8).
-          </p>
-          {calculatedThirds.length === 0 ? (
-            <div className="p-4 rounded-xl bg-amber-50 text-amber-800 border border-amber-200/60 text-xs font-semibold">
-              Aún no hay terceros calculados. Ingresa predicciones de fase de grupos para activarlos.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {calculatedThirds.map((team, idx) => {
-                  const isSelected = selectedThirds.includes(team.teamId);
-                  const isSuggested = idx < 8;
-                  return (
-                    <div
-                      key={team.teamId}
-                      onClick={() => handleToggleThird(team.teamId)}
-                      className={`p-3 border rounded-xl relative cursor-pointer text-center select-none transition-all ${isSelected ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold'
-                          : isSuggested ? 'border-slate-200 bg-emerald-50/10 hover:border-indigo-400'
-                            : 'border-slate-100 hover:border-indigo-200 bg-white'
-                        }`}
-                    >
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">3ro G{team.groupLabel}</span>
-                      <div className="flex justify-center mb-1.5">
-                        <TeamFlag teamId={team.teamId} className="w-8 h-5.5" />
-                      </div>
-                      <span className="text-xs font-bold text-slate-800 leading-normal block truncate">{team.teamName}</span>
-                      <span className="text-[10px] text-slate-400 block mt-1 font-mono">{team.points} pts | DG {team.gd}</span>
-                      <div className={`absolute top-2 right-2 w-4.5 h-4.5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300'}`}>
-                        {isSelected && <Check className="w-3.5 h-3.5" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-4 text-xs">
-                <span className={`px-2.5 py-0.5 rounded-full font-bold shadow-sm ${selectedThirds.length === 8 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  {selectedThirds.length} / 8 Seleccionados
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* SUB-MENÚ DE FASES */}
       <div className="flex border-b border-slate-100 pb-px">
         {bracketStages.map((s) => (
@@ -333,8 +280,8 @@ export default function BracketStage({
             <div
               key={m.id}
               className={`bg-white border rounded-3xl p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow relative overflow-hidden ${hasTiePredicted && !readOnly && penHStr === ''
-                  ? 'border-indigo-200 ring-2 ring-indigo-500/20'
-                  : 'border-slate-100'
+                ? 'border-indigo-200 ring-2 ring-indigo-500/20'
+                : 'border-slate-100'
                 }`}
             >
               {/* Puntos obtenidos */}
