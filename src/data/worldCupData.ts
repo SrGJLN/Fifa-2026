@@ -214,19 +214,19 @@ export const generateR16Matches = (): Match[] => {
 
 export const generateQFMatches = (): Match[] => {
   const pairings = [
-    { id: 301, home: 'G201', away: 'G202', city: 'Boston', venue: 'Gillette Stadium' },
-    { id: 302, home: 'G203', away: 'G204', city: 'Miami', venue: 'Hard Rock Stadium' },
-    { id: 303, home: 'G205', away: 'G206', city: 'Los Ángeles', venue: 'SoFi Stadium' },
-    { id: 304, home: 'G207', away: 'G208', city: 'Kansas City', venue: 'Arrowhead Stadium' }
+    { id: 301, home: 'FRA', away: 'MAR', date: '9 jul', time: '16:00', city: 'Dallas', venue: 'AT&T Stadium' },
+    { id: 302, home: 'ESP', away: 'BEL', date: '9 jul', time: '20:00', city: 'Miami', venue: 'Hard Rock Stadium' },
+    { id: 303, home: 'NOR', away: 'ENG', date: '10 jul', time: '16:00', city: 'Los Ángeles', venue: 'SoFi Stadium' },
+    { id: 304, home: 'ARG', away: 'SUI', date: '10 jul', time: '20:00', city: 'New York / New Jersey', venue: 'MetLife Stadium' },
   ];
 
-  return pairings.map((p, idx) => ({
+  return pairings.map(p => ({
     id: p.id,
     stage: 'qf',
     teamHomeId: p.home,
     teamAwayId: p.away,
-    date: `${9 + Math.floor(idx / 2)} jul`,
-    time: idx % 2 === 0 ? '16:00' : '20:00',
+    date: p.date,
+    time: p.time,
     venue: p.venue,
     city: p.city,
     completed: false

@@ -399,10 +399,25 @@ app.post('/api/update-fixture', async (req, res) => {
   const store = await loadDb();
 
   const newR16 = ALL_INITIAL_MATCHES.filter(m => m.stage === 'r16');
+  const newQF = ALL_INITIAL_MATCHES.filter(m => m.stage === 'qf');
 
   store.officialMatches = store.officialMatches.map(m => {
     if (m.stage === 'r16') {
       const newMatch = newR16.find(nm => nm.id === m.id);
+      if (newMatch) {
+        return {
+          ...newMatch,
+          teamHomeScore: m.teamHomeScore,
+          teamAwayScore: m.teamAwayScore,
+          completed: m.completed,
+          winnerId: m.winnerId,
+          penaltyHomeScore: m.penaltyHomeScore,
+          penaltyAwayScore: m.penaltyAwayScore
+        };
+      }
+    }
+    if (m.stage === 'qf') {
+      const newMatch = newQF.find(nm => nm.id === m.id);
       if (newMatch) {
         return {
           ...newMatch,
