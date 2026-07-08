@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Match, MatchPick, ActivePhase } from '../types';
 import { GROUPS, getTeamName, TEAMS } from '../data/worldCupData';
 import { calculateGroupStandings } from '../utils/football';
 import TeamFlag from './TeamFlag';
-import { Trophy, HelpCircle, Lock, TrendingUp } from 'lucide-react';
+import { Trophy, HelpCircle, Lock, TrendingUp, ChevronRight } from 'lucide-react';
 
 interface OfficialStandingsProps {
   groupMatches: Match[];
@@ -33,8 +33,88 @@ const phaseStage: Record<string, string> = {
   final: 'final'
 };
 
+interface MatchCardProps {
+  match: Match | null;
+  label?: string;
+}
+
+function MatchCard({ match, label }: MatchCardProps) {
+  if (!match) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 w-52 opacity-50">
+        <p className="text-xs text-slate-400 font-semibold text-center">{label || 'Por definir'}</p>
+      </div>
+    );
+  }
+
+  const isKnown = (id: string) => TEAMS.some(t => t.id === id);
+  const homeName = isKnown(match.teamHomeId) ? getTeamName(match.teamHomeId) : match.teamHomeId;
+  const awayName = isKnown(match.teamAwayId) ? getTeamName(match.teamAwayId) : match.teamAwayId;
+  const hasResult = match.completed && match.teamHomeScore !== undefined && match.teamAwayScore !== undefined;
+  const hasPenalties = hasResult && match.penaltyHomeScore !== undefined && match.penaltyAwayScore !== undefined;
+  const homeWon = hasResult && (match.teamHomeScore! > match.teamAwayScore! || (hasPenalties && match.penaltyHomeScore! > match.penaltyAwayScore!));
+  const awayWon = hasResult && (match.teamAwayScore! > match.teamHomeScore! || (hasPenalties && match.penaltyAwayScore! > match.penaltyHomeScore!));
+
+  return (
+    <div className={`border rounded-xl overflow-hidden w-52 shadow-sm ${match.completed ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-white'}`}>
+      {/* Fecha */}
+      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <span className="text-[10px] text-slate-400 font-semibold">{match.date} · {match.time}</span>
+        {match.completed && <span className="text-[9px] font-bold text-emerald-600 uppercase">{hasPenalties ? 'Fin (P)' : 'Fin'}</span>}
+      </div>
+
+      {/* Equipo Local */}
+      <div className={`flex items-center justify-between px-3 py-2 border-b border-slate-50 ${homeWon ? 'bg-emerald-50/40' : ''}`}>
+        <div className="flex items-center gap-2">
+          {isKnown(match.teamHomeId) ? (
+            <TeamFlag teamId={match.teamHomeId} className="w-5 h-3.5 shrink-0" />
+          ) : (
+            <span className="text-slate-300 text-xs font-mono w-5 text-center">?</span>
+          )}
+          <span className={`text-xs font-bold truncate max-w-[100px] ${homeWon ? 'text-emerald-700' : 'text-slate-700'}`}>{homeName}</span>
+        </div>
+        {hasResult && (
+          <div className="flex flex-col items-end">
+            <span className={`text-sm font-extrabold font-mono ${homeWon ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {match.teamHomeScore}
+            </span>
+            {hasPenalties && (
+              <span className="text-[9px] text-amber-600 font-bold">({match.penaltyHomeScore})</span>
+            )}
+          </div>
+        )}
+        {!hasResult && <span className="text-slate-200 text-sm font-bold">-</span>}
+      </div>
+
+      {/* Equipo Visitante */}
+      <div className={`flex items-center justify-between px-3 py-2 ${awayWon ? 'bg-emerald-50/40' : ''}`}>
+        <div className="flex items-center gap-2">
+          {isKnown(match.teamAwayId) ? (
+            <TeamFlag teamId={match.teamAwayId} className="w-5 h-3.5 shrink-0" />
+          ) : (
+            <span className="text-slate-300 text-xs font-mono w-5 text-center">?</span>
+          )}
+          <span className={`text-xs font-bold truncate max-w-[100px] ${awayWon ? 'text-emerald-700' : 'text-slate-700'}`}>{awayName}</span>
+        </div>
+        {hasResult && (
+          <div className="flex flex-col items-end">
+            <span className={`text-sm font-extrabold font-mono ${awayWon ? 'text-emerald-600' : 'text-slate-400'}`}>
+              {match.teamAwayScore}
+            </span>
+            {hasPenalties && (
+              <span className="text-[9px] text-amber-600 font-bold">({match.penaltyAwayScore})</span>
+            )}
+          </div>
+        )}
+        {!hasResult && <span className="text-slate-200 text-sm font-bold">-</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function OfficialStandings({ groupMatches, allMatches = [], activePhase = 'group' }: OfficialStandingsProps) {
   const groupLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+  const [expandedPhase, setExpandedPhase] = useState<string | null>(activePhase);
 
   const officialPicksMap = groupMatches.reduce((acc, m) => {
     if (m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined) {
@@ -43,20 +123,32 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
     return acc;
   }, {} as { [id: number]: MatchPick });
 
-  const phaseMatches = allMatches.filter(m => {
-    if (activePhase === 'final') return m.stage === 'final' || m.stage === 'third';
-    return m.stage === phaseStage[activePhase];
+  const getPhaseMatches = (stage: string) => allMatches.filter(m => {
+    if (stage === 'final') return m.stage === 'final' || m.stage === 'third';
+    return m.stage === stage;
   });
 
   const completedCount = activePhase === 'group'
     ? groupMatches.filter(m => m.completed).length
-    : phaseMatches.filter(m => m.completed).length;
+    : getPhaseMatches(phaseStage[activePhase]).filter(m => m.completed).length;
 
   const totalCount = activePhase === 'group'
     ? groupMatches.length
-    : phaseMatches.length;
+    : getPhaseMatches(phaseStage[activePhase]).length;
 
-  const isKnownTeam = (id: string) => TEAMS.some(t => t.id === id);
+  const r32Matches = getPhaseMatches('r32');
+  const r16Matches = getPhaseMatches('r16');
+  const qfMatches = getPhaseMatches('qf');
+  const sfMatches = getPhaseMatches('sf');
+  const finalMatches = getPhaseMatches('final');
+
+  const phases = [
+    { id: 'r32', label: 'Dieciseisavos', matches: r32Matches },
+    { id: 'r16', label: 'Octavos', matches: r16Matches },
+    { id: 'qf', label: 'Cuartos', matches: qfMatches },
+    { id: 'sf', label: 'Semifinales', matches: sfMatches },
+    { id: 'final', label: 'Final', matches: finalMatches },
+  ];
 
   return (
     <div className="space-y-6" id="official-standings-section">
@@ -160,114 +252,45 @@ export default function OfficialStandings({ groupMatches, allMatches = [], activ
         </div>
       )}
 
-      {/* FASES ELIMINATORIAS — tarjetas verticales */}
+      {/* FASES ELIMINATORIAS — bracket visual */}
       {activePhase !== 'group' && (
-        <div>
-          <h3 className="text-base font-black text-slate-900 mb-4 uppercase tracking-wide flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            {phaseLabel[activePhase]} — Resultados Oficiales
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {phaseMatches.map((m, idx) => {
-              const homeName = getTeamName(m.teamHomeId);
-              const awayName = getTeamName(m.teamAwayId);
-              const hasResult = m.completed && m.teamHomeScore !== undefined && m.teamAwayScore !== undefined;
-              const hasPenalties = hasResult && m.penaltyHomeScore !== undefined && m.penaltyAwayScore !== undefined;
-              const homeWon = hasResult && m.teamHomeScore! > m.teamAwayScore!;
-              const awayWon = hasResult && m.teamAwayScore! > m.teamHomeScore!;
-              const homePenWon = hasPenalties && m.penaltyHomeScore! > m.penaltyAwayScore!;
-              const awayPenWon = hasPenalties && m.penaltyAwayScore! > m.penaltyHomeScore!;
-
-              return (
-                <div
-                  key={m.id}
-                  className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all ${m.completed ? 'border-emerald-100' : 'border-slate-100'
-                    }`}
-                >
-                  {/* Header */}
-                  <div className={`px-4 py-2 flex items-center justify-between text-xs ${m.completed ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-slate-50 border-b border-slate-100'
-                    }`}>
-                    <span className="font-extrabold text-indigo-600">#{idx + 1}</span>
-                    <span className="text-slate-400 font-medium">{m.date} · {m.time}</span>
-                  </div>
-
-                  {/* Equipo Local */}
-                  <div className={`flex items-center justify-between px-4 py-3 border-b border-slate-50 ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon)) ? 'bg-emerald-50/30' : ''
-                    }`}>
-                    <div className="flex items-center gap-2.5">
-                      {isKnownTeam(m.teamHomeId) ? (
-                        <TeamFlag teamId={m.teamHomeId} className="w-7 h-5 shrink-0" />
-                      ) : (
-                        <span className="text-slate-300 text-lg">🌐</span>
-                      )}
-                      <span className={`font-bold text-sm ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon))
-                          ? 'text-emerald-700' : 'text-slate-800'
-                        }`}>
-                        {homeName}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      {hasResult ? (
-                        <div className="flex flex-col items-end">
-                          <span className={`font-extrabold text-xl font-mono ${(homeWon || (hasResult && m.teamHomeScore === m.teamAwayScore && homePenWon))
-                              ? 'text-emerald-600' : 'text-slate-400'
-                            }`}>
-                            {m.teamHomeScore}
-                          </span>
-                          {hasPenalties && (
-                            <span className="text-[10px] text-amber-600 font-bold">({m.penaltyHomeScore})</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-200 font-extrabold text-xl">-</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Equipo Visitante */}
-                  <div className={`flex items-center justify-between px-4 py-3 ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon)) ? 'bg-emerald-50/30' : ''
-                    }`}>
-                    <div className="flex items-center gap-2.5">
-                      {isKnownTeam(m.teamAwayId) ? (
-                        <TeamFlag teamId={m.teamAwayId} className="w-7 h-5 shrink-0" />
-                      ) : (
-                        <span className="text-slate-300 text-lg">🌐</span>
-                      )}
-                      <span className={`font-bold text-sm ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon))
-                          ? 'text-emerald-700' : 'text-slate-800'
-                        }`}>
-                        {awayName}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      {hasResult ? (
-                        <div className="flex flex-col items-end">
-                          <span className={`font-extrabold text-xl font-mono ${(awayWon || (hasResult && m.teamHomeScore === m.teamAwayScore && awayPenWon))
-                              ? 'text-emerald-600' : 'text-slate-400'
-                            }`}>
-                            {m.teamAwayScore}
-                          </span>
-                          {hasPenalties && (
-                            <span className="text-[10px] text-amber-600 font-bold">({m.penaltyAwayScore})</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-200 font-extrabold text-xl">-</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Footer penales */}
-                  {hasPenalties && (
-                    <div className="px-4 py-1.5 bg-amber-50 border-t border-amber-100 text-center">
-                      <span className="text-[10px] text-amber-700 font-bold">Definido en penales</span>
-                    </div>
-                  )}
+        <div className="space-y-4">
+          {phases.filter(p => p.matches.length > 0).map(phase => (
+            <div key={phase.id} className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+              {/* Header colapsable */}
+              <button
+                type="button"
+                onClick={() => setExpandedPhase(expandedPhase === phase.id ? null : phase.id)}
+                className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`w-2.5 h-2.5 rounded-full ${phase.matches.every(m => m.completed) ? 'bg-emerald-500' : phase.matches.some(m => m.completed) ? 'bg-amber-400 animate-pulse' : 'bg-slate-300'}`} />
+                  <span className="font-black text-slate-900 text-sm uppercase tracking-wide">{phase.label}</span>
+                  <span className="text-xs text-slate-400 font-medium">
+                    {phase.matches.filter(m => m.completed).length} / {phase.matches.length} jugados
+                  </span>
                 </div>
-              );
-            })}
-          </div>
+                <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expandedPhase === phase.id ? 'rotate-90' : ''}`} />
+              </button>
+
+              {/* Contenido del bracket */}
+              {expandedPhase === phase.id && (
+                <div className="px-5 pb-6 border-t border-slate-100 overflow-x-auto">
+                  <div className="pt-4 flex items-start gap-6 min-w-max">
+                    {/* Partidos de la fase */}
+                    <div className="flex flex-col gap-4">
+                      {phase.matches.map((m, idx) => (
+                        <div key={m.id} className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-slate-400 w-4 text-center">{idx + 1}</span>
+                          <MatchCard match={m} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
