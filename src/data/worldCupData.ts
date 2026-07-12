@@ -238,8 +238,8 @@ export const generateSFMatches = (): Match[] => {
     {
       id: 401,
       stage: 'sf',
-      teamHomeId: 'G301',
-      teamAwayId: 'G302',
+      teamHomeId: 'FRA',
+      teamAwayId: 'ESP',
       date: '14 jul',
       time: '19:00',
       venue: 'AT&T Stadium',
@@ -249,12 +249,12 @@ export const generateSFMatches = (): Match[] => {
     {
       id: 402,
       stage: 'sf',
-      teamHomeId: 'G303',
-      teamAwayId: 'G304',
+      teamHomeId: 'ENG',
+      teamAwayId: 'ARG',
       date: '15 jul',
       time: '19:00',
-      venue: 'Mercedes-Benz Stadium',
-      city: 'Atlanta',
+      venue: 'MetLife Stadium',
+      city: 'New York / New Jersey',
       completed: false
     }
   ];
