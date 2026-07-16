@@ -265,8 +265,8 @@ export const generateThirdPlaceMatch = (): Match[] => {
     {
       id: 501,
       stage: 'third',
-      teamHomeId: 'P401',
-      teamAwayId: 'P402',
+      teamHomeId: 'FRA',
+      teamAwayId: 'ENG',
       date: '18 jul',
       time: '15:00',
       venue: 'Hard Rock Stadium',
@@ -281,8 +281,8 @@ export const generateFinalMatch = (): Match[] => {
     {
       id: 601,
       stage: 'final',
-      teamHomeId: 'G401',
-      teamAwayId: 'G402',
+      teamHomeId: 'ESP',
+      teamAwayId: 'ARG',
       date: '19 jul',
       time: '16:00',
       venue: 'MetLife Stadium',

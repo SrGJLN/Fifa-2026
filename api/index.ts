@@ -401,49 +401,29 @@ app.post('/api/update-fixture', async (req, res) => {
   const newR16 = ALL_INITIAL_MATCHES.filter(m => m.stage === 'r16');
   const newQF = ALL_INITIAL_MATCHES.filter(m => m.stage === 'qf');
   const newSF = ALL_INITIAL_MATCHES.filter(m => m.stage === 'sf');
+  const newThird = ALL_INITIAL_MATCHES.filter(m => m.stage === 'third');
+  const newFinal = ALL_INITIAL_MATCHES.filter(m => m.stage === 'final');
 
   store.officialMatches = store.officialMatches.map(m => {
     if (m.stage === 'r16') {
       const newMatch = newR16.find(nm => nm.id === m.id);
-      if (newMatch) {
-        return {
-          ...newMatch,
-          teamHomeScore: m.teamHomeScore,
-          teamAwayScore: m.teamAwayScore,
-          completed: m.completed,
-          winnerId: m.winnerId,
-          penaltyHomeScore: m.penaltyHomeScore,
-          penaltyAwayScore: m.penaltyAwayScore
-        };
-      }
+      if (newMatch) return { ...newMatch, teamHomeScore: m.teamHomeScore, teamAwayScore: m.teamAwayScore, completed: m.completed, winnerId: m.winnerId, penaltyHomeScore: m.penaltyHomeScore, penaltyAwayScore: m.penaltyAwayScore };
     }
     if (m.stage === 'qf') {
       const newMatch = newQF.find(nm => nm.id === m.id);
-      if (newMatch) {
-        return {
-          ...newMatch,
-          teamHomeScore: m.teamHomeScore,
-          teamAwayScore: m.teamAwayScore,
-          completed: m.completed,
-          winnerId: m.winnerId,
-          penaltyHomeScore: m.penaltyHomeScore,
-          penaltyAwayScore: m.penaltyAwayScore
-        };
-      }
+      if (newMatch) return { ...newMatch, teamHomeScore: m.teamHomeScore, teamAwayScore: m.teamAwayScore, completed: m.completed, winnerId: m.winnerId, penaltyHomeScore: m.penaltyHomeScore, penaltyAwayScore: m.penaltyAwayScore };
     }
     if (m.stage === 'sf') {
       const newMatch = newSF.find(nm => nm.id === m.id);
-      if (newMatch) {
-        return {
-          ...newMatch,
-          teamHomeScore: m.teamHomeScore,
-          teamAwayScore: m.teamAwayScore,
-          completed: m.completed,
-          winnerId: m.winnerId,
-          penaltyHomeScore: m.penaltyHomeScore,
-          penaltyAwayScore: m.penaltyAwayScore
-        };
-      }
+      if (newMatch) return { ...newMatch, teamHomeScore: m.teamHomeScore, teamAwayScore: m.teamAwayScore, completed: m.completed, winnerId: m.winnerId, penaltyHomeScore: m.penaltyHomeScore, penaltyAwayScore: m.penaltyAwayScore };
+    }
+    if (m.stage === 'third') {
+      const newMatch = newThird.find(nm => nm.id === m.id);
+      if (newMatch) return { ...newMatch, teamHomeScore: m.teamHomeScore, teamAwayScore: m.teamAwayScore, completed: m.completed, winnerId: m.winnerId, penaltyHomeScore: m.penaltyHomeScore, penaltyAwayScore: m.penaltyAwayScore };
+    }
+    if (m.stage === 'final') {
+      const newMatch = newFinal.find(nm => nm.id === m.id);
+      if (newMatch) return { ...newMatch, teamHomeScore: m.teamHomeScore, teamAwayScore: m.teamAwayScore, completed: m.completed, winnerId: m.winnerId, penaltyHomeScore: m.penaltyHomeScore, penaltyAwayScore: m.penaltyAwayScore };
     }
     return m;
   });
